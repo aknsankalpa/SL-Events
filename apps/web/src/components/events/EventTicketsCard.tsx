@@ -8,7 +8,7 @@ import { buildIcs, downloadIcs } from "@/lib/calendar";
 import { lowestListedPrice, ticketsLeft, type EventItem } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 
-export function EventTicketsCard({ event }: { event: EventItem }) {
+export function EventTicketsCard({ event, preview = false }: { event: EventItem; preview?: boolean }) {
   const [saved, setSaved] = useState(false);
   const [shared, setShared] = useState(false);
   const allSoldOut = event.ticketTypes.every((t) => ticketsLeft(t) === 0);
@@ -80,12 +80,22 @@ export function EventTicketsCard({ event }: { event: EventItem }) {
 
       {allSoldOut ? (
         <p className="mt-5 rounded-lg border border-line bg-surface-2 p-3 text-center text-sm text-muted">This event is sold out.</p>
+      ) : preview ? (
+        <button
+          type="button"
+          disabled
+          className="mt-5 inline-flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-gold to-amber px-7 text-sm font-bold text-ink opacity-60"
+        >
+          <Ticket size={16} aria-hidden /> Select tickets
+        </button>
       ) : (
         <LinkButton href={`/events/${event.slug}/book`} size="lg" className="mt-5 w-full">
           <Ticket size={16} aria-hidden /> Select tickets
         </LinkButton>
       )}
-      <p className="mt-3 text-center text-[11px] text-dim">You&apos;ll pay by bank transfer, then upload your receipt.</p>
+      <p className="mt-3 text-center text-[11px] text-dim">
+        {preview ? "Preview only. Buying is switched off." : "You'll pay by bank transfer, then upload your receipt."}
+      </p>
 
       <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-xs font-bold">
         <button type="button" onClick={addToCalendar} className="flex items-center gap-2 text-muted hover:text-gold">

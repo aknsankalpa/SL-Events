@@ -9,17 +9,108 @@ export const organizer = {
   org: "Lanka Beats Korea",
 };
 
+/* ---------- Event drafts (what the creation wizard collects) ---------- */
+
+export type DraftTicketType = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  maxPerOrder: number;
+  color: string; // hex
+  saleNote: string;
+  perks: string;
+  visible: boolean;
+};
+
+/** One seat found in (or added to) an uploaded seating-plan image. Coordinates are pixels of `SeatLayout.imageUrl`. */
+export type LayoutSeat = {
+  uid: string;
+  x: number;
+  y: number;
+  /** Radius used to draw the seat. */
+  r: number;
+  /** Section id, or null while the seat has not been assigned. */
+  section: string | null;
+  blocked?: boolean;
+  accessible?: boolean;
+  /** Derived from the position by numbering: "C", 12. Never edited by hand. */
+  row: string;
+  num: number;
+};
+
+export type DetectionSettings = {
+  /** Which kind of shape is a seat: darker or lighter than the background. "auto" picks the rarer one. */
+  polarity: "auto" | "dark" | "light";
+  /** Added to the automatic brightness cut-off. Negative finds fainter shapes. */
+  threshold: number;
+  /** Seat size accepted, as a multiple of the most common shape size. */
+  sizeRange: [number, number];
+  /** How far apart (in seat heights) two seats can be vertically and still sit in one row. */
+  rowTolerance: number;
+  rowOrder: "top-down" | "bottom-up";
+  seatOrder: "left-right" | "right-left";
+};
+
+export type SeatLayout = {
+  /** The uploaded plan, downscaled, as a data URL so it survives a reload. */
+  imageUrl: string;
+  width: number;
+  height: number;
+  seats: LayoutSeat[];
+  settings: DetectionSettings;
+};
+
+export type SeatMapState = {
+  template: string;
+  sections: SeatSection[];
+  blocked: string[]; // seat ids like "H8"
+  accessible: string[];
+  /** Present when the map was built from an uploaded image instead of the row/column grid builder. */
+  layout?: SeatLayout;
+};
+
+export type EventDraft = {
+  name: string;
+  category: string;
+  tags: string;
+  description: string;
+  date: string; // "2026-12-19"
+  doorsOpen: string; // "17:30"
+  starts: string; // "18:30"
+  venue: string;
+  address: string;
+  /** Who is hosting. Optional so drafts saved before these fields existed still load. */
+  organizerName?: string;
+  organizerAbout?: string;
+  organizerEmail?: string;
+  organizerPhone?: string;
+  organizerLink?: string;
+  sellMode: "tickets" | "seats";
+  coverName: string;
+  /** Downscaled data URL (so it survives a reload and can be shown in the preview frame). */
+  coverUrl: string;
+  ticketTypes: DraftTicketType[];
+  seatMap: SeatMapState;
+  pricingReviewed: boolean;
+};
+
 export type OrganizerEvent = {
   id: string;
   title: string;
   category: CategoryId;
   dateLabel: string; // "Sat, 14 Nov 2026"
   shortDate: string; // "14 Nov 2026"
+  /** ISO start in Korea time; drives "days left" and the calendar. Optional for drafts without a date. */
+  startsAt?: string;
+  venue?: string;
   sold: number;
   capacity: number;
   revenue: number;
   pending: number;
   status: "on_sale" | "draft" | "in_review";
+  /** Everything the organizer entered, for events created in the wizard. Drives preview and re-editing. */
+  draft?: EventDraft;
 };
 
 export const organizerEvents: OrganizerEvent[] = [
@@ -29,6 +120,8 @@ export const organizerEvents: OrganizerEvent[] = [
     category: "concert",
     dateLabel: "Sat, 14 Nov 2026",
     shortDate: "14 Nov 2026",
+    startsAt: "2026-11-14T18:00:00+09:00",
+    venue: "Hongdae Live Hall, Seoul",
     sold: 228,
     capacity: 360,
     revenue: 7350000,
@@ -41,6 +134,8 @@ export const organizerEvents: OrganizerEvent[] = [
     category: "party",
     dateLabel: "Sat, 28 Nov 2026",
     shortDate: "28 Nov 2026",
+    startsAt: "2026-11-28T20:00:00+09:00",
+    venue: "Songdo Event Hall, Incheon",
     sold: 170,
     capacity: 300,
     revenue: 4200000,
@@ -53,6 +148,8 @@ export const organizerEvents: OrganizerEvent[] = [
     category: "culture",
     dateLabel: "Sun, 8 Nov 2026",
     shortDate: "8 Nov 2026",
+    startsAt: "2026-11-08T18:30:00+09:00",
+    venue: "Guro Arts Hall, Seoul",
     sold: 0,
     capacity: 150,
     revenue: 0,
@@ -529,7 +626,22 @@ export const promoCodes: PromoCode[] = [
 
 /* ---------- Dashboard ---------- */
 
+/**
+ * "Today" for the mock dashboard. The mock sales series ends on this day, so days-left and the calendar
+ * are computed against it instead of the real clock (which would also cause server/client mismatches).
+ */
+export const REFERENCE_DATE = "2026-10-13";
+
+export function daysUntil(iso: string): number {
+  const day = (v: string) => Date.parse(v.slice(0, 10));
+  return Math.round((day(iso) - day(REFERENCE_DATE)) / 86_400_000);
+}
+
 export const dashboardStats = {
+  /** Week-over-week change shown in the stat chips (mock until the API reports real comparisons). */
+  soldChangePct: 18,
+  revenueChangePct: 21,
+  avgTicketPrice: 29000,
   ticketsSold: 398,
   soldThisWeek: 71,
   revenue: 11550000,
@@ -610,4 +722,67 @@ export const sectionColors = ["#ece7dc", "#f7cb60", "#f28b82", "#4ade80", "#60a5
 /** Unique-enough client-side id for mock records created in the UI. The API will issue real ids. */
 export function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+}
+
+/* ---------- Seat and capacity helpers shared by the wizard, the review step and the preview ---------- */
+
+/** "A to H" → ["A", ..., "H"]; returns null when the text can't be parsed. */
+export function parseRows(text: string): string[] | null {
+  const m = text.trim().toUpperCase().match(/^([A-Z])\s*(?:TO|-|–)\s*([A-Z])$/);
+  if (!m) return null;
+  const [from, to] = [m[1]!.charCodeAt(0), m[2]!.charCodeAt(0)];
+  if (to < from) return null;
+  return Array.from({ length: to - from + 1 }, (_, i) => String.fromCharCode(from + i));
+}
+
+export function seatIds(section: SeatSection): string[] {
+  const rows = parseRows(section.rows) ?? [];
+  return rows.flatMap((r) => Array.from({ length: section.seatsPerRow }, (_, i) => `${r}${i + 1}`));
+}
+
+export function sectionStats(section: SeatSection, blocked: string[]) {
+  const all = seatIds(section);
+  const free = all.filter((id) => !blocked.includes(id)).length;
+  return { total: all.length, free, revenue: free * section.price };
+}
+
+export function capacityOf(types: DraftTicketType[]) {
+  const sellable = types.filter((t) => t.visible);
+  return {
+    tickets: sellable.reduce((n, t) => n + t.quantity, 0),
+    revenue: sellable.reduce((n, t) => n + t.quantity * t.price, 0),
+  };
+}
+
+/** "2026-12-19" → "Sat, 19 Dec 2026" (empty string when the date isn't set). */
+export function formatEventDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "Concert" → "concert". Falls back to culture for anything unrecognised. */
+export function categoryIdOf(label: string): CategoryId {
+  const id = label.trim().toLowerCase();
+  return (["concert", "party", "cricket", "culture", "movies", "food", "travel", "community"] as const).find((c) => c === id) ?? "culture";
+}
+
+/** Seats, sellable seats and best-case revenue for a section, whichever way the map was built. */
+export function seatMapSectionStats(map: SeatMapState, section: SeatSection) {
+  if (map.layout) {
+    const mine = map.layout.seats.filter((s) => s.section === section.id);
+    const free = mine.filter((s) => !s.blocked).length;
+    return { total: mine.length, free, revenue: free * section.price };
+  }
+  return sectionStats(section, map.blocked);
+}
+
+/** Seats with no section yet. These can't be sold, so the review step asks the organizer to place them. */
+export function unassignedSeats(map: SeatMapState): number {
+  return map.layout ? map.layout.seats.filter((s) => s.section === null && !s.blocked).length : 0;
 }

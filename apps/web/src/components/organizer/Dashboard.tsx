@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CheckCheck, ChevronDown, Download, FileText, Grid2x2, Hourglass, Ticket, TrendingUp, TriangleAlert, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCheck, ChevronDown, Download, FileText, Grid2x2, Plus, Users } from "lucide-react";
 import { EventThumb } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/StatusBadge";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { formatKrw } from "@/lib/format";
 import {
   dailySales,
@@ -15,8 +17,15 @@ import {
   salesByTicket,
   verifyQueue,
 } from "@/lib/organizer";
-import { Button } from "@/components/ui/Button";
-import { downloadCsv, OrgPageHeader, Panel, StatCard } from "./ui";
+import { useOrganizer } from "./OrganizerContext";
+import { useRefundRequests } from "./useRefundRequests";
+import { EventCalendar } from "./dashboard/EventCalendar";
+import { RecentOrders } from "./dashboard/RecentOrders";
+import { SalesChart } from "./dashboard/SalesChart";
+import { StatCards } from "./dashboard/StatCards";
+import { TicketMix } from "./dashboard/TicketMix";
+import { UpcomingEvents } from "./dashboard/UpcomingEvents";
+import { downloadCsv } from "./ui";
 
 const periods = [
   { days: 7, label: "Last 7 days" },
@@ -27,24 +36,35 @@ const periods = [
 const reportIcons = { sales: FileText, bookings: FileText, attendees: Users, verification: CheckCheck } as const;
 
 export function Dashboard() {
+  const { events, pending } = useOrganizer();
+  const { pending: requestsPending } = useRefundRequests();
   const [days, setDays] = useState(14);
   const [eventFilter, setEventFilter] = useState("all");
 
   const series = useMemo(() => dailySales.slice(-days), [days]);
-  const max = Math.max(...series.map((d) => d.value));
-  const axisMax = Math.ceil(max / 20) * 20;
-
-  const events = organizerEvents.filter((e) => eventFilter === "all" || e.id === eventFilter);
+  const shownEvents = events.filter((e) => eventFilter === "all" || e.id === eventFilter);
   const byTicket = salesByTicket.filter((t) => eventFilter === "all" || t.event === eventFilter);
   const periodLabel = periods.find((p) => p.days === days)!.label.toLowerCase();
+  const oldest = verifyQueue[0]?.waited.replace(" ago", "");
 
   return (
-    <>
-      <OrgPageHeader
-        crumbs={[{ label: organizer.org }]}
-        title="Sales dashboard"
-        actions={
-          <>
+    <div className="mx-auto max-w-[96rem]">
+      <header className="relative mb-6 overflow-hidden rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_140%_at_0%_0%,rgb(150_20_20/0.35),transparent_70%),radial-gradient(40%_120%_at_100%_0%,rgb(110_80_20/0.35),transparent_70%)]"
+        />
+        <div className="relative flex flex-wrap items-end justify-between gap-5">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-amber">{organizer.org}</p>
+            <h1 className="mt-2 font-display text-[28px] font-bold leading-tight text-text sm:text-[34px]">
+              Welcome back, {organizer.name.split(" ")[0]}
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              Here&apos;s how your events are doing. {dashboardStats.soldThisWeek} tickets sold this week.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <SelectPill label="Period" icon={<CalendarDays size={14} />} value={String(days)} onChange={(v) => setDays(Number(v))}>
               {periods.map((p) => (
                 <option key={p.days} value={p.days}>
@@ -54,183 +74,149 @@ export function Dashboard() {
             </SelectPill>
             <SelectPill label="Event" icon={<Grid2x2 size={14} />} value={eventFilter} onChange={setEventFilter}>
               <option value="all">All events</option>
-              {organizerEvents.map((e) => (
+              {events.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.title}
                 </option>
               ))}
             </SelectPill>
             <ReportMenu periodLabel={periodLabel} />
-          </>
-        }
-      />
+            <LinkButton href="/organizer/events/new" variant="outline" className="h-11">
+              <Plus size={16} aria-hidden /> Create event
+            </LinkButton>
+          </div>
+        </div>
+      </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Tickets sold"
-          value={dashboardStats.ticketsSold}
-          Icon={Ticket}
-          subTone="up"
-          sub={
-            <>
-              <TrendingUp size={12} aria-hidden /> +{dashboardStats.soldThisWeek} this week
-            </>
-          }
-        />
-        <StatCard
-          label="Revenue confirmed"
-          value={formatKrw(dashboardStats.revenue)}
-          subTone="up"
-          sub={
-            <>
-              <TrendingUp size={12} aria-hidden /> +{formatKrw(dashboardStats.revenueThisWeek)} this week
-            </>
-          }
-        />
-        <StatCard
-          label="Waiting for verification"
-          value={dashboardStats.waiting}
-          Icon={Hourglass}
-          subTone="warn"
-          sub={
-            <>
-              <TriangleAlert size={12} aria-hidden /> {formatKrw(dashboardStats.waitingAmount)} not yet confirmed
-            </>
-          }
-        />
-        <StatCard
-          label="Tickets left"
-          value={dashboardStats.ticketsLeft}
-          Icon={Grid2x2}
-          sub={`of ${dashboardStats.ticketsTotal} across live events`}
-        />
+      {pending > 0 && (
+        <div
+          role="status"
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber/40 bg-amber/10 px-5 py-4"
+        >
+          <p className="text-[13px] text-text">
+            <strong className="font-bold">{pending} payments</strong> are waiting for verification
+            {oldest ? ` · oldest ${oldest}` : ""}. Buyers get their tickets as soon as you approve.
+          </p>
+          <Link href="/organizer/verify-payments" className="flex items-center gap-1.5 text-xs font-bold text-amber hover:text-gold">
+            Review payments <ArrowRight size={13} aria-hidden />
+          </Link>
+        </div>
+      )}
+
+      {requestsPending > 0 && (
+        <div
+          role="status"
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-5 py-4"
+        >
+          <p className="text-[13px] text-text">
+            <strong className="font-bold">
+              {requestsPending} refund or cancellation request{requestsPending === 1 ? " is" : "s are"}
+            </strong>{" "}
+            waiting for your decision.
+          </p>
+          <Link href="/organizer/requests" className="flex items-center gap-1.5 text-xs font-bold text-amber hover:text-gold">
+            Review requests <ArrowRight size={13} aria-hidden />
+          </Link>
+        </div>
+      )}
+
+      <StatCards pending={pending} />
+
+      {/* On phones the upcoming events come straight after the numbers; on wide screens they sit in the side column. */}
+      <div className="mt-6 xl:hidden">
+        <UpcomingEvents events={shownEvents} />
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]">
-        <Panel className="p-6">
-          <h2 className="text-base font-bold text-text">Tickets sold per day</h2>
-          <p className="mt-1 text-[11px] text-dim">Confirmed payments only · {periodLabel}</p>
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_23.5rem]">
+        <div className="min-w-0 space-y-6">
+          <SalesChart series={series} avgPrice={dashboardStats.avgTicketPrice} periodLabel={periodLabel} />
+          <RecentOrders />
 
-          <figure className="mt-5" aria-label={`Tickets sold per day, ${periodLabel}`}>
-            <div className="flex gap-3">
-              <div aria-hidden className="flex h-48 flex-col justify-between pb-6 text-[10px] text-dim">
-                {[axisMax, axisMax * 0.75, axisMax * 0.5, axisMax * 0.25, 0].map((t) => (
-                  <span key={t}>{Math.round(t)}</span>
-                ))}
-              </div>
-              <ol className="flex h-48 flex-1 items-end gap-1 sm:gap-1.5">
-                {series.map((d, i) => {
-                  const last = i === series.length - 1;
-                  const showLabel = days <= 14 ? i % 2 === 0 : i % 5 === 0;
-                  return (
-                    <li key={d.date} className="relative flex h-full min-w-0 flex-1 flex-col justify-end">
-                      {last && <span className="mb-1 text-center text-[11px] font-bold text-text">{d.value}</span>}
-                      <span
-                        title={`${d.label}: ${d.value} tickets`}
-                        style={{ height: `${(d.value / axisMax) * 100 * 0.875}%` }}
-                        className={`block w-full rounded-t ${last ? "bg-gradient-to-t from-amber to-gold" : "bg-amber/70"}`}
-                      />
-                      <span className="relative mt-2 block h-4 text-[10px] leading-4 text-dim">
-                        <span
-                          className={
-                            showLabel ? "absolute left-1/2 -translate-x-1/2 whitespace-nowrap" : "sr-only"
+          <section className="overflow-hidden rounded-2xl border border-line bg-surface" aria-label="Event performance">
+            <div className="p-5 pb-4 sm:p-6 sm:pb-4">
+              <h2 className="text-base font-bold text-text">Event performance</h2>
+              <p className="mt-1 text-[11px] text-dim">Sales and payments to check, per event</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem] text-left text-[13px]">
+                <thead className="bg-surface-2 text-[10px] uppercase tracking-wider text-dim">
+                  <tr>
+                    {["Event", "Date", "Sold", "Revenue", "To verify"].map((h) => (
+                      <th key={h} scope="col" className="whitespace-nowrap px-5 py-3 font-bold">
+                        {h}
+                      </th>
+                    ))}
+                    <th scope="col" className="px-5">
+                      <span className="sr-only">Report</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shownEvents.map((e) => (
+                    <tr key={e.id} className="border-t border-line">
+                      <td className="px-5 py-4">
+                        <span className="flex items-center gap-3 font-bold text-text">
+                          <EventThumb category={e.category} size={30} />
+                          <span className="whitespace-nowrap">{e.title}</span>
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-muted">{e.shortDate}</td>
+                      <td className="px-5 py-4">
+                        <div className="w-32">
+                          <p className="mb-1.5 text-[11px] text-muted">
+                            {e.sold} / {e.capacity}
+                          </p>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-line">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-amber to-gold"
+                              style={{ width: `${e.capacity ? (e.sold / e.capacity) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 font-bold text-text">{formatKrw(e.revenue)}</td>
+                      <td className="px-5 py-4">
+                        {e.pending > 0 ? <Badge tone="warning">{e.pending} pending</Badge> : <span className="text-dim">—</span>}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-line text-text hover:bg-surface-2"
+                          onClick={() =>
+                            downloadCsv(`${e.id}-report.csv`, [
+                              ["Event", "Date", "Sold", "Capacity", "Revenue (KRW)", "Payments to verify"],
+                              [e.title, e.shortDate, e.sold, e.capacity, e.revenue, e.pending],
+                            ])
                           }
                         >
-                          {d.label}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
+                          <Download size={14} aria-hidden /> Report
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {shownEvents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-8 text-center text-sm text-muted">
+                        No events to show.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </figure>
-        </Panel>
-
-        <Panel className="p-6">
-          <h2 className="text-base font-bold text-text">Sales by ticket type</h2>
-          <p className="mt-1 text-[11px] text-dim">{eventFilter === "all" ? "All events" : events[0]?.title} · tickets sold of quantity</p>
-          <ul className="mt-5 space-y-5">
-            {byTicket.map((t) => (
-              <li key={t.label}>
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span className="font-bold text-text">{t.label}</span>
-                  <span className="text-muted">
-                    {t.sold} / {t.of}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-line">
-                  <div className="h-full rounded-full bg-gradient-to-r from-amber to-gold" style={{ width: `${(t.sold / t.of) * 100}%` }} />
-                </div>
-              </li>
-            ))}
-            {byTicket.length === 0 && <li className="text-sm text-muted">No sales yet.</li>}
-          </ul>
-        </Panel>
-      </div>
-
-      <h2 className="mb-3 mt-8 font-display text-xl font-bold text-text">By event</h2>
-      <Panel className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-left text-[13px]">
-            <thead className="border-b border-line text-[10px] uppercase tracking-wider text-dim">
-              <tr>
-                {["Event", "Date", "Sold", "Revenue", "To verify"].map((h) => (
-                  <th key={h} scope="col" className="px-5 py-3.5 font-bold">
-                    {h}
-                  </th>
-                ))}
-                <th scope="col" className="px-5">
-                  <span className="sr-only">Report</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e) => (
-                <tr key={e.id} className="border-b border-line last:border-b-0">
-                  <td className="px-5 py-4">
-                    <span className="flex items-center gap-3 font-bold text-text">
-                      <EventThumb category={e.category} size={28} />
-                      {e.title}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-muted">{e.shortDate}</td>
-                  <td className="px-5 py-4">
-                    <div className="w-32">
-                      <p className="mb-1.5 text-[11px] text-muted">
-                        {e.sold} / {e.capacity}
-                      </p>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-line">
-                        <div className="h-full rounded-full bg-gradient-to-r from-amber to-gold" style={{ width: `${(e.sold / e.capacity) * 100}%` }} />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 font-bold text-text">{formatKrw(e.revenue)}</td>
-                  <td className="px-5 py-4">
-                    {e.pending > 0 ? <Badge tone="warning">{e.pending} pending</Badge> : <span className="text-dim">—</span>}
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-line text-text hover:bg-surface-2"
-                      onClick={() =>
-                        downloadCsv(`${e.id}-report.csv`, [
-                          ["Event", "Date", "Sold", "Capacity", "Revenue (KRW)", "Payments to verify"],
-                          [e.title, e.shortDate, e.sold, e.capacity, e.revenue, e.pending],
-                        ])
-                      }
-                    >
-                      <Download size={14} aria-hidden /> Report
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          </section>
         </div>
-      </Panel>
-    </>
+
+        <div className="min-w-0 space-y-6">
+          <div className="hidden xl:block">
+            <UpcomingEvents events={shownEvents} />
+          </div>
+          <EventCalendar events={events} />
+          <TicketMix slices={byTicket.map((t) => ({ label: t.label, sold: t.sold }))} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -248,7 +234,7 @@ function SelectPill({
   children: React.ReactNode;
 }) {
   return (
-    <label className="relative flex h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-[13px] font-bold text-text focus-within:border-gold">
+    <label className="relative flex h-11 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 text-[13px] font-bold text-text focus-within:border-gold">
       <span className="text-muted">{icon}</span>
       <span className="sr-only">{label}</span>
       <select

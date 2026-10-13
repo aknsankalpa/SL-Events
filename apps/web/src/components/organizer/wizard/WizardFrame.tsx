@@ -2,10 +2,10 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Stepper } from "@/components/ui/Stepper";
-import { newId } from "@/lib/organizer";
+import { categoryIdOf, formatEventDate, newId } from "@/lib/organizer";
 import { useOrganizer } from "../OrganizerContext";
 import { OrgPageHeader } from "../ui";
 import { EventDraftProvider, useEventDraft, capacityOf } from "./EventDraft";
@@ -29,14 +29,17 @@ function Frame({ children }: { children: ReactNode }) {
     addEvent({
       id: newId("draft"),
       title: draft.name.trim() || "Untitled event",
-      category: "culture",
-      dateLabel: draft.date,
-      shortDate: draft.date,
+      category: categoryIdOf(draft.category),
+      dateLabel: formatEventDate(draft.date),
+      shortDate: formatEventDate(draft.date),
+      startsAt: draft.date ? `${draft.date}T${draft.starts || "18:00"}:00+09:00` : undefined,
+      venue: [draft.venue, draft.address].filter(Boolean).join(", ") || undefined,
       sold: 0,
       capacity: cap,
       revenue: 0,
       pending: 0,
       status: "draft",
+      draft,
     });
     router.push("/organizer/events");
   }
@@ -46,22 +49,35 @@ function Frame({ children }: { children: ReactNode }) {
       <OrgPageHeader
         crumbs={[{ label: "Events", href: "/organizer/events" }, { label: "New event" }]}
         title="Create an event"
-        actions={
-          <>
-            <Button variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={saveDraft}>
-              Save as draft
-            </Button>
-            {!last && (
-              <Button onClick={() => router.push(routes[step]!)}>
-                Continue <ArrowRight size={16} aria-hidden />
-              </Button>
-            )}
-          </>
-        }
       >
         <Stepper current={step} steps={wizardSteps} label="Event creation progress" className="mt-5" />
       </OrgPageHeader>
+
       {children}
+
+      {/* The actions sit at the end of every step, after the content the organizer has just filled in. */}
+      <nav
+        aria-label="Event creation actions"
+        className="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          {step > 1 && (
+            <Button variant="ghost" className="w-full sm:w-auto" onClick={() => router.push(routes[step - 2]!)}>
+              <ArrowLeft size={16} aria-hidden /> Back
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={saveDraft}>
+            Save as draft
+          </Button>
+          {!last && (
+            <Button onClick={() => router.push(routes[step]!)}>
+              Continue <ArrowRight size={16} aria-hidden />
+            </Button>
+          )}
+        </div>
+      </nav>
     </>
   );
 }

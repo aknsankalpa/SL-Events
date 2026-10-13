@@ -1,7 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { organizerEvents, pendingPaymentsTotal, type OrganizerEvent } from "@/lib/organizer";
+import {
+  addCreatedEvent,
+  getServerSnapshot,
+  getSnapshot,
+  subscribe,
+  updateCreatedEvent,
+} from "@/lib/organizerStore";
 
 type OrganizerState = {
   events: OrganizerEvent[];
@@ -18,16 +25,23 @@ type OrganizerState = {
 const Ctx = createContext<OrganizerState | null>(null);
 
 export function OrganizerProvider({ children }: { children: ReactNode }) {
-  const [events, setEvents] = useState<OrganizerEvent[]>(organizerEvents);
+  // Events created in the wizard live in a persisted store; the seeded sample events stay in local state.
+  const created = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [seeded, setSeeded] = useState<OrganizerEvent[]>(organizerEvents);
   const [eventId, setEventId] = useState(organizerEvents[0]!.id);
   const [pending, setPending] = useState(pendingPaymentsTotal);
 
   const resolveOnePending = useCallback(() => setPending((n) => Math.max(0, n - 1)), []);
-  const addEvent = useCallback((e: OrganizerEvent) => setEvents((prev) => [e, ...prev]), []);
+  const addEvent = useCallback((e: OrganizerEvent) => addCreatedEvent(e), []);
   const updateEvent = useCallback(
-    (id: string, patch: Partial<OrganizerEvent>) => setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e))),
+    (id: string, patch: Partial<OrganizerEvent>) => {
+      if (getSnapshot().some((e) => e.id === id)) updateCreatedEvent(id, patch);
+      else setSeeded((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    },
     [],
   );
+
+  const events = useMemo(() => [...created, ...seeded], [created, seeded]);
 
   const value = useMemo<OrganizerState>(
     () => ({

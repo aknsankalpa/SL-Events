@@ -56,7 +56,21 @@ export type EventItem = {
   area: string; // e.g. "Mapo-gu, Seoul"
   tagline: string;
   description: string[];
+  /** Rich-text version of the description (sanitised on display). Present for organizer-written events. */
+  descriptionHtml?: string;
   organizer: string;
+  /** The venue's seating chart, for events built from an uploaded plan. Coordinates are pixels of `imageUrl`. */
+  seatingPlan?: {
+    imageUrl: string;
+    width: number;
+    height: number;
+    seats: { x: number; y: number; r: number; color: string }[];
+    legend: { name: string; color: string; price: number; seats: number }[];
+  };
+  organizerAbout?: string;
+  organizerEmail?: string;
+  organizerPhone?: string;
+  organizerLink?: string;
   doorsOpen: string;
   ticketTypes: TicketType[];
   /** True when the event has one ticket price, so the card shows no "From" prefix. */

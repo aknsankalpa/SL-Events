@@ -1,13 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CalendarDays, CheckCircle2, ChevronDown, Clock, Eye, MapPin, Pause, Play } from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Eye,
+  Globe,
+  Mail,
+  MapPin,
+  Pause,
+  Phone,
+  Play,
+  User,
+} from "lucide-react";
 import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { RichTextEditor } from "@/components/ui/RichTextEditorLazy";
 import { Badge } from "@/components/ui/StatusBadge";
-import { changeHistory, eventCategories, eventStatusLabel } from "@/lib/organizer";
+import { fileToCoverDataUrl } from "@/lib/image";
+import { changeHistory, eventCategories, eventStatusLabel, formatEventDate, type OrganizerEvent } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { Dialog, OrgPageHeader, Panel } from "./ui";
 
@@ -21,6 +38,11 @@ type Form = {
   starts: string;
   venue: string;
   address: string;
+  organizerName: string;
+  organizerAbout: string;
+  organizerEmail: string;
+  organizerPhone: string;
+  organizerLink: string;
 };
 
 const saved: Record<string, Form> = {
@@ -35,6 +57,11 @@ const saved: Record<string, Form> = {
     starts: "18:00",
     venue: "Hongdae Live Hall",
     address: "Mapo-gu, Seoul",
+    organizerName: "Lanka Beats Korea",
+    organizerAbout: "",
+    organizerEmail: "",
+    organizerPhone: "",
+    organizerLink: "",
   },
 };
 
@@ -46,14 +73,60 @@ const fmtTime = (t: string) => {
 const fmtDate = (iso: string) =>
   iso ? new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
+/**
+ * Waits for the browser store to hydrate before mounting the form, so a saved draft never opens blank: the form
+ * reads its initial values once.
+ */
 export function EventEditor({ id }: { id: string }) {
-  const { events, updateEvent } = useOrganizer();
+  const { events } = useOrganizer();
+  const hydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
   const event = events.find((e) => e.id === id);
 
-  const initial = useMemo<Form>(
-    () =>
+  if (!hydrated) return <p className="text-sm text-muted">Loading event…</p>;
+  if (!event) {
+    return (
+      <Panel className="p-10 text-center">
+        <p className="text-base font-bold text-text">Event not found</p>
+        <p className="mt-2 text-sm text-muted">Drafts are kept in the browser they were created in.</p>
+        <LinkButton href="/organizer/events" className="mt-5">
+          Back to events
+        </LinkButton>
+      </Panel>
+    );
+  }
+  return <EventEditorForm key={id} id={id} event={event} />;
+}
+
+function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
+  const { updateEvent } = useOrganizer();
+
+  const initial = useMemo<Form>(() => {
+    const d = event.draft;
+    if (d) {
+      return {
+        name: d.name,
+        category: d.category,
+        tags: d.tags,
+        description: d.description,
+        date: d.date,
+        doorsOpen: d.doorsOpen,
+        starts: d.starts,
+        venue: d.venue,
+        address: d.address,
+        organizerName: d.organizerName ?? "",
+        organizerAbout: d.organizerAbout ?? "",
+        organizerEmail: d.organizerEmail ?? "",
+        organizerPhone: d.organizerPhone ?? "",
+        organizerLink: d.organizerLink ?? "",
+      };
+    }
+    return (
       saved[id] ?? {
-        name: event?.title ?? "",
+        name: event.title,
         category: "Culture",
         tags: "",
         description: "",
@@ -62,9 +135,16 @@ export function EventEditor({ id }: { id: string }) {
         starts: "18:00",
         venue: "",
         address: "",
-      },
-    [id, event?.title],
-  );
+        organizerName: "",
+        organizerAbout: "",
+        organizerEmail: "",
+        organizerPhone: "",
+        organizerLink: "",
+      }
+    );
+    // The form only reads its starting values once; later edits live in `form`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [form, setForm] = useState<Form>(initial);
   // The last saved values; unsaved edits are highlighted against this.
@@ -75,7 +155,11 @@ export function EventEditor({ id }: { id: string }) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelled, setCancelled] = useState(false);
   const [toast, setToast] = useState<string>();
-  const [cover, setCover] = useState({ name: "cover-music-night.jpg", url: "" });
+  const [cover, setCover] = useState({
+    name: event.draft ? event.draft.coverName || "No cover image yet" : "cover-music-night.jpg",
+    url: event.draft?.coverUrl ?? "",
+  });
+  const [coverError, setCoverError] = useState<string>();
 
   useEffect(() => {
     if (!toast) return;
@@ -107,17 +191,6 @@ export function EventEditor({ id }: { id: string }) {
   }, [form.starts, form.doorsOpen, form.date, form.venue, form.address]);
   const shownMessage = message || autoMessage;
 
-  if (!event) {
-    return (
-      <Panel className="p-10 text-center">
-        <p className="text-base font-bold text-text">Event not found</p>
-        <LinkButton href="/organizer/events" className="mt-5">
-          Back to events
-        </LinkButton>
-      </Panel>
-    );
-  }
-
   const history = [
     ...(changed.starts ? [{ label: `Start time ${fmtTime(baseline.starts)} → ${fmtTime(form.starts)}`, meta: "Not saved yet", pending: true }] : []),
     ...changeHistory.map((h) => ({ ...h, pending: false })),
@@ -125,11 +198,19 @@ export function EventEditor({ id }: { id: string }) {
 
   function save() {
     // TODO: persist through the API and queue the notification email when `notify` is on.
-    updateEvent(id, { title: form.name.trim() || event!.title });
+    const patch: Partial<OrganizerEvent> = { title: form.name.trim() || event.title };
+    if (event.draft) {
+      patch.draft = { ...event.draft, ...form, coverUrl: cover.url, coverName: cover.url ? cover.name : "" };
+      patch.dateLabel = formatEventDate(form.date);
+      patch.shortDate = patch.dateLabel;
+      patch.startsAt = form.date ? `${form.date}T${form.starts || "18:00"}:00+09:00` : undefined;
+      patch.venue = [form.venue, form.address].filter(Boolean).join(", ") || undefined;
+    }
+    updateEvent(id, patch);
     setBaseline(form);
     setToast(
       sensitive && notify
-        ? `Saved. ${event!.sold} ticket holders will be emailed about the change.`
+        ? `Saved. ${event.sold} ticket holders will be emailed about the change.`
         : "Saved.",
     );
     setMessage("");
@@ -168,6 +249,11 @@ export function EventEditor({ id }: { id: string }) {
           <Link href="/organizer/pricing" className="px-3 py-2.5 text-[13px] font-bold text-muted hover:text-text">
             Pricing
           </Link>
+          {event.status !== "draft" && (
+            <Link href={`/organizer/events/${id}/operations`} className="px-3 py-2.5 text-[13px] font-bold text-muted hover:text-text">
+              Operations
+            </Link>
+          )}
           <span aria-disabled="true" title="Not available yet" className="cursor-not-allowed px-3 py-2.5 text-[13px] font-bold text-dim">
             Page settings
           </span>
@@ -214,18 +300,13 @@ export function EventEditor({ id }: { id: string }) {
                 </div>
                 <Field label="Short tags" value={form.tags} onChange={(e) => set({ tags: e.target.value })} />
               </div>
-              <div>
-                <label htmlFor="edit-description" className="mb-2 block text-xs font-bold text-muted">
-                  Description
-                </label>
-                <textarea
-                  id="edit-description"
-                  rows={4}
-                  value={form.description}
-                  onChange={(e) => set({ description: e.target.value })}
-                  className="w-full resize-none rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-text focus:border-gold focus:outline-none"
-                />
-              </div>
+              <RichTextEditor
+                label="Description"
+                value={form.description}
+                onChange={(html) => set({ description: html })}
+                hint="Select text to make it bold, add a link or build a list."
+                minHeightClass="min-h-44"
+              />
             </div>
           </Panel>
 
@@ -279,6 +360,60 @@ export function EventEditor({ id }: { id: string }) {
               </div>
             )}
           </Panel>
+
+          <Panel className="p-5 sm:p-6">
+            <h2 className="text-lg font-bold text-text">Organizer details</h2>
+            <p className="mb-5 mt-1 text-[11px] text-dim">
+              Shown on the event page so buyers know who is hosting and how to reach you.
+            </p>
+            <div className="space-y-5">
+              <Field
+                label="Organizer or group name"
+                icon={<User />}
+                value={form.organizerName}
+                onChange={(e) => set({ organizerName: e.target.value })}
+                autoComplete="organization"
+              />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  label="Contact email"
+                  type="email"
+                  icon={<Mail />}
+                  value={form.organizerEmail}
+                  onChange={(e) => set({ organizerEmail: e.target.value })}
+                  autoComplete="email"
+                />
+                <Field
+                  label="Contact phone"
+                  type="tel"
+                  icon={<Phone />}
+                  value={form.organizerPhone}
+                  onChange={(e) => set({ organizerPhone: e.target.value })}
+                  autoComplete="tel"
+                />
+              </div>
+              <Field
+                label="Website or social page (optional)"
+                icon={<Globe />}
+                value={form.organizerLink}
+                onChange={(e) => set({ organizerLink: e.target.value })}
+                placeholder="instagram.com/yourgroup"
+              />
+              <div>
+                <label htmlFor="edit-organizer-about" className="mb-2 block text-xs font-bold text-muted">
+                  About the organizer (optional)
+                </label>
+                <textarea
+                  id="edit-organizer-about"
+                  rows={3}
+                  maxLength={500}
+                  value={form.organizerAbout}
+                  onChange={(e) => set({ organizerAbout: e.target.value })}
+                  className="w-full resize-none rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-text placeholder:text-dim focus:border-gold focus:outline-none"
+                />
+              </div>
+            </div>
+          </Panel>
         </div>
 
         <div className="space-y-5">
@@ -287,7 +422,7 @@ export function EventEditor({ id }: { id: string }) {
               className={`relative flex h-36 items-center justify-center bg-gradient-to-br ${coverGradients[event.category]}`}
             >
               {cover.url && (
-                // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+                // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
                 <img src={cover.url} alt="" className="absolute inset-0 size-full object-cover" />
               )}
               <span className="absolute left-3 top-3 rounded-full border border-gold/40 bg-black/70 px-2.5 py-1 text-[10px] font-bold uppercase text-gold">
@@ -303,18 +438,21 @@ export function EventEditor({ id }: { id: string }) {
                   type="file"
                   accept="image/jpeg,image/png"
                   className="sr-only"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const f = e.target.files?.[0];
-                    if (f) {
-                      setCover((c) => {
-                        if (c.url) URL.revokeObjectURL(c.url);
-                        return { name: f.name, url: URL.createObjectURL(f) };
-                      });
+                    if (!f) return;
+                    if (!["image/jpeg", "image/png"].includes(f.type)) return setCoverError("Use a JPG or PNG image.");
+                    try {
+                      setCover({ name: f.name, url: await fileToCoverDataUrl(f) });
+                      setCoverError(undefined);
+                    } catch {
+                      setCoverError("That image couldn't be read.");
                     }
                   }}
                 />
               </label>
             </div>
+            {coverError && <p className="px-4 pb-3 text-xs text-danger">{coverError}</p>}
           </Panel>
 
           <Panel className="p-5">

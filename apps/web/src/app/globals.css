@@ -63,6 +63,72 @@ body {
   }
 }
 
+/* Organizer-written rich text: shared by the editor and the buyer-facing page. */
+.rich-text {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.rich-text > * + * {
+  margin-top: 0.75rem;
+}
+.rich-text strong,
+.rich-text b {
+  color: var(--color-text);
+  font-weight: 700;
+}
+.rich-text h2 {
+  color: var(--color-text);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 1.25rem;
+}
+.rich-text h3 {
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+.rich-text ul,
+.rich-text ol {
+  padding-left: 1.4rem;
+}
+.rich-text ul {
+  list-style: disc;
+}
+.rich-text ol {
+  list-style: decimal;
+}
+.rich-text li + li {
+  margin-top: 0.25rem;
+}
+.rich-text li > p {
+  margin: 0;
+}
+.rich-text blockquote {
+  border-left: 3px solid var(--color-amber);
+  padding-left: 1rem;
+  color: var(--color-text);
+  font-style: italic;
+}
+.rich-text a {
+  color: var(--color-gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rich-text hr {
+  border-color: var(--color-line);
+}
+.rich-text p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-dim);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
 /* Tick mark for custom checkboxes (see components/ui/Field.tsx) */
 .checkbox-box:checked {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231a1000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 8.5l3 3 6-6.5'/></svg>");

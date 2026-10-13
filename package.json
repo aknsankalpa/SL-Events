@@ -1,0 +1,13 @@
+{
+  "name": "sl-events",
+  "private": true,
+  "description": "SL Events: event and ticket booking platform for the Sri Lankan community in South Korea",
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start",
+    "lint": "npm --prefix apps/web run lint",
+    "typecheck": "npm --prefix apps/web exec -- tsc --noEmit",
+    "install:web": "npm --prefix apps/web install"
+  }
+}

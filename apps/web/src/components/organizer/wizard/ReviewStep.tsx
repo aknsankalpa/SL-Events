@@ -4,16 +4,13 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, CheckCircle2, MapPin, Send, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatKrw } from "@/lib/format";
-import { newId } from "@/lib/organizer";
+import { categoryIdOf, formatEventDate, newId, seatMapSectionStats, unassignedSeats } from "@/lib/organizer";
+import { htmlToText, isEmptyHtml } from "@/lib/richText";
 import { useOrganizer } from "../OrganizerContext";
 import { Panel } from "../ui";
-import { capacityOf, seatIds, sectionStats, useEventDraft, VENUE_LIMIT } from "./EventDraft";
+import { capacityOf, useEventDraft, VENUE_LIMIT } from "./EventDraft";
 
-function formatDate(iso: string) {
-  if (!iso) return "No date yet";
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-}
+const formatDate = (iso: string) => formatEventDate(iso) || "No date yet";
 
 export function ReviewStep() {
   const router = useRouter();
@@ -22,19 +19,20 @@ export function ReviewStep() {
 
   const seats = draft.sellMode === "seats";
   const ticketCap = capacityOf(draft.ticketTypes);
-  const seatStats = draft.seatMap.sections.map((s) => sectionStats(s, draft.seatMap.blocked));
+  const seatStats = draft.seatMap.sections.map((s) => seatMapSectionStats(draft.seatMap, s));
   const seatCount = seatStats.reduce((n, s) => n + s.free, 0);
   const capacity = seats ? seatCount : ticketCap.tickets;
   const revenue = seats ? seatStats.reduce((n, s) => n + s.revenue, 0) : ticketCap.revenue;
 
   const problems: string[] = [];
   if (!draft.name.trim()) problems.push("Add an event name.");
-  if (!draft.description.trim()) problems.push("Add a description.");
+  if (isEmptyHtml(draft.description)) problems.push("Add a description.");
   if (!draft.date) problems.push("Choose a date.");
   if (!draft.venue.trim() || !draft.address.trim()) problems.push("Add the venue name and address.");
   if (capacity === 0) problems.push(seats ? "Add at least one section with seats." : "Add at least one ticket type.");
   if (!seats && capacity > VENUE_LIMIT) problems.push(`Ticket quantity is over the venue limit of ${VENUE_LIMIT}.`);
   if (!seats && draft.ticketTypes.some((t) => !t.name.trim())) problems.push("Give every ticket type a name.");
+  if (seats && unassignedSeats(draft.seatMap) > 0) problems.push("Assign every seat on the seating plan to a section.");
 
   function submit() {
     if (problems.length) return;
@@ -42,14 +40,17 @@ export function ReviewStep() {
     addEvent({
       id: newId("event"),
       title: draft.name.trim(),
-      category: "culture",
+      category: categoryIdOf(draft.category),
       dateLabel: formatDate(draft.date),
       shortDate: formatDate(draft.date),
+      startsAt: draft.date ? `${draft.date}T${draft.starts || "18:00"}:00+09:00` : undefined,
+      venue: [draft.venue, draft.address].filter(Boolean).join(", ") || undefined,
       sold: 0,
       capacity,
       revenue: 0,
       pending: 0,
       status: "in_review",
+      draft,
     });
     router.push("/organizer/events");
   }
@@ -61,7 +62,7 @@ export function ReviewStep() {
         <p className="mt-1 text-xs text-dim">
           {draft.category} {draft.tags && `· ${draft.tags}`}
         </p>
-        <p className="mt-4 text-sm leading-relaxed text-muted">{draft.description}</p>
+        <p className="mt-4 line-clamp-6 whitespace-pre-line text-sm leading-relaxed text-muted">{htmlToText(draft.description)}</p>
 
         <dl className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="flex items-start gap-3 rounded-lg border border-line bg-surface-2 p-4">
@@ -92,7 +93,7 @@ export function ReviewStep() {
                   <span className="flex items-center gap-2 text-text">
                     <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: s.color }} />
                     {s.name}
-                    <span className="text-[11px] text-dim">{seatIds(s).length} seats</span>
+                    <span className="text-[11px] text-dim">{seatMapSectionStats(draft.seatMap, s).total} seats</span>
                   </span>
                   <span className="font-bold text-text">{formatKrw(s.price)}</span>
                 </li>

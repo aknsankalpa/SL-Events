@@ -6,6 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/Button";
 import { attendees, gates, recentScans, type ScanOutcome, type ScanRecord } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
+import { useEventOps } from "./operations/useEventOps";
 import { EventPicker, OrgPageHeader, Panel } from "./ui";
 
 type Result = {
@@ -30,6 +31,26 @@ const outcomeStyles: Record<ScanOutcome, { badge: string; label: string }> = {
 
 type DetectorLike = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> };
 
+/** A short tone (and a buzz where supported) so staff know the result without looking. */
+function feedback(kind: "admit" | "refuse") {
+  try {
+    navigator.vibrate?.(kind === "admit" ? 40 : [90, 50, 90]);
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = kind === "admit" ? 880 : 220;
+    gain.gain.value = 0.08;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + (kind === "admit" ? 0.12 : 0.3));
+    osc.onended = () => void ctx.close();
+  } catch {
+    /* audio blocked until the user interacts with the page; the visual result is enough */
+  }
+}
+
 const noopSubscribe = () => () => undefined;
 
 function useBrowserValue<T>(read: () => T, serverValue: T): T {
@@ -38,6 +59,9 @@ function useBrowserValue<T>(read: () => T, serverValue: T): T {
 
 export function ScannerPage() {
   const { event } = useOrganizer();
+  // The organizer's event-day rules for the selected event: paused state, name privacy, re-entry, sound.
+  const { ops } = useEventOps(event.id);
+  const { paused, settings } = ops;
   const [gate, setGate] = useState(gates[0]!);
   const [code, setCode] = useState("");
   const [result, setResult] = useState<Result>();
@@ -55,46 +79,74 @@ export function ScannerPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const lastRead = useRef<{ value: string; at: number }>({ value: "", at: 0 });
 
-  const check = useCallback((raw: string) => {
-    const value = raw.trim().toUpperCase();
-    if (!value) return;
-    const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const holder = attendees.find((a) => a.code === value);
-    const other = otherEventCodes[value];
+  const check = useCallback(
+    (raw: string) => {
+      const value = raw.trim().toUpperCase();
+      if (!value) return;
 
-    let next: Result;
-    if (other) {
-      next = { outcome: "wrong_event", title: "Wrong event", name: other.name, detail: other.event, note: "This ticket is for a different event." };
-    } else if (!holder || holder.state === "cancelled") {
-      next = { outcome: "not_found", title: "Not valid", note: holder ? "This ticket was refunded." : "No ticket with that code." };
-    } else if (holder.state === "checked_in" || used.current.has(value)) {
-      next = {
-        outcome: "already_used",
-        title: "Already used",
-        name: holder.name,
-        detail: `${holder.ticket} · ${holder.code}`,
-        note: "This ticket has already been scanned.",
-      };
-    } else {
-      // TODO: the server must mark the ticket used in the same atomic step that returns "admit".
-      used.current.add(value);
-      next = {
-        outcome: "admit",
-        title: "Admit",
-        name: holder.name,
-        detail: `${holder.ticket} · ${holder.code}`,
-        note: `Booking ${holder.booking} checked in`,
-      };
-    }
+      if (paused) {
+        // Nothing is admitted, and the attempt isn't counted as a refused ticket.
+        setResult({
+          outcome: "wrong_event",
+          title: "Check-in paused",
+          note: "The organizer has paused check-in. Don't admit anyone until it resumes.",
+        });
+        if (settings.soundFeedback) feedback("refuse");
+        return;
+      }
 
-    setResult(next);
-    setScans((s) => [{ outcome: next.outcome, name: next.name ?? value, detail: next.detail?.split(" · ")[0] ?? "—", time }, ...s].slice(0, 6));
-    setCounts((c) =>
-      next.outcome === "admit"
-        ? { ...c, checkedIn: c.checkedIn + 1, remaining: Math.max(0, c.remaining - 1) }
-        : { ...c, rejected: c.rejected + 1 },
-    );
-  }, []);
+      const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      const holder = attendees.find((a) => a.code === value);
+      const other = otherEventCodes[value];
+      const who = (name: string) => (settings.showGuestNames ? name : undefined);
+      const detailFor = (ticket: string, code: string) => (settings.showGuestNames ? `${ticket} · ${code}` : ticket);
+      const idReminder = holder?.ticket === "Student" && settings.studentIdCheck ? " Check their student ID before letting them in." : "";
+
+      let next: Result;
+      if (other) {
+        next = {
+          outcome: "wrong_event",
+          title: "Wrong event",
+          name: who(other.name),
+          detail: other.event,
+          note: "This ticket is for a different event.",
+        };
+      } else if (!holder || holder.state === "cancelled") {
+        next = { outcome: "not_found", title: "Not valid", note: holder ? "This ticket was refunded." : "No ticket with that code." };
+      } else if ((holder.state === "checked_in" || used.current.has(value)) && !settings.allowReentry) {
+        next = {
+          outcome: "already_used",
+          title: "Already used",
+          name: who(holder.name),
+          detail: detailFor(holder.ticket, holder.code),
+          note: "This ticket has already been scanned.",
+        };
+      } else {
+        // TODO: the server must mark the ticket used in the same atomic step that returns "admit".
+        const reentry = holder.state === "checked_in" || used.current.has(value);
+        used.current.add(value);
+        next = {
+          outcome: "admit",
+          title: reentry ? "Admit (re-entry)" : "Admit",
+          name: who(holder.name),
+          detail: detailFor(holder.ticket, holder.code),
+          note: `${reentry ? "Re-entry allowed for this event." : `Booking ${holder.booking} checked in.`}${idReminder}`,
+        };
+      }
+
+      setResult(next);
+      if (settings.soundFeedback) feedback(next.outcome === "admit" ? "admit" : "refuse");
+      setScans((s) =>
+        [{ outcome: next.outcome, name: next.name ?? "Guest", detail: next.detail?.split(" · ")[0] ?? "—", time }, ...s].slice(0, 6),
+      );
+      setCounts((c) =>
+        next.outcome === "admit"
+          ? { ...c, checkedIn: c.checkedIn + 1, remaining: Math.max(0, c.remaining - 1) }
+          : { ...c, rejected: c.rejected + 1 },
+      );
+    },
+    [paused, settings],
+  );
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -276,6 +328,12 @@ export function ScannerPage() {
         </div>
 
         <div className="space-y-4">
+          {paused && (
+            <p role="status" className="flex items-start gap-2.5 rounded-xl border border-amber/40 bg-amber/10 px-4 py-3 text-xs text-text">
+              <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0 text-amber" />
+              Check-in is paused by the organizer. Scans are not admitted.
+            </p>
+          )}
           <section
             aria-live="polite"
             className={`rounded-xl border-2 p-5 ${

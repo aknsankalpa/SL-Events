@@ -1,42 +1,62 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { Armchair, Building2, CalendarDays, CheckCircle2, ChevronDown, Clock, Image as ImageIcon, Info, MapPin, Tag } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import {
+  Armchair,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Globe,
+  Image as ImageIcon,
+  Info,
+  Mail,
+  MapPin,
+  Phone,
+  Tag,
+  User,
+} from "lucide-react";
 import { Field } from "@/components/ui/Field";
+import { RichTextEditor } from "@/components/ui/RichTextEditorLazy";
 import { Badge } from "@/components/ui/StatusBadge";
+import { fileToCoverDataUrl } from "@/lib/image";
 import { eventCategories } from "@/lib/organizer";
+import { isEmptyHtml } from "@/lib/richText";
 import { Panel } from "../ui";
+import { useOrganizerProfile } from "../useOrganizerProfile";
 import { capacityOf, useEventDraft } from "./EventDraft";
 
 export function DetailsStep() {
   const { draft, patch } = useEventDraft();
+  const { profile } = useOrganizerProfile();
   const fileId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [coverError, setCoverError] = useState<string>();
 
-  // Release the blob URL when the image is replaced or the step unmounts.
-  const url = draft.coverUrl;
-  useEffect(() => {
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [url]);
-
-  function accept(file?: File) {
+  async function accept(file?: File) {
     if (!file) return;
     if (!["image/jpeg", "image/png"].includes(file.type)) return setCoverError("Use a JPG or PNG image.");
     if (file.size > 8 * 1024 * 1024) return setCoverError("That image is larger than 8 MB.");
-    setCoverError(undefined);
-    patch({ coverUrl: URL.createObjectURL(file), coverName: file.name });
+    try {
+      const coverUrl = await fileToCoverDataUrl(file);
+      setCoverError(undefined);
+      patch({ coverUrl, coverName: file.name });
+    } catch {
+      setCoverError("That image couldn't be read. Try a different file.");
+    }
   }
 
-  const basics = draft.name.trim() !== "" && draft.description.trim() !== "";
+  const basics = draft.name.trim() !== "" && !isEmptyHtml(draft.description);
   const place = draft.date !== "" && draft.venue.trim() !== "" && draft.address.trim() !== "";
+  const host =
+    !!draft.organizerName?.trim() && !!(draft.organizerEmail?.trim() || draft.organizerPhone?.trim() || draft.organizerLink?.trim());
   const tickets = draft.sellMode === "seats" ? draft.seatMap.sections.length > 0 : capacityOf(draft.ticketTypes).tickets > 0;
   const checklist = [
     { label: "Basics", done: basics },
     { label: "Date and place", done: place },
+    { label: "Organizer details", done: host },
     { label: "Tickets & seating", done: tickets },
     { label: "Pricing", done: draft.pricingReviewed },
   ];
@@ -69,18 +89,14 @@ export function DetailsStep() {
               </div>
               <Field label="Short tags" value={draft.tags} onChange={(e) => patch({ tags: e.target.value })} placeholder="Dance · Drumming · Family" />
             </div>
-            <div>
-              <label htmlFor="description" className="mb-2 block text-xs font-bold text-muted">
-                Description
-              </label>
-              <textarea
-                id="description"
-                rows={4}
-                value={draft.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                className="w-full resize-none rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-text placeholder:text-dim focus:border-gold focus:outline-none"
-              />
-            </div>
+            <RichTextEditor
+              label="Description"
+              value={draft.description}
+              onChange={(html) => patch({ description: html })}
+              placeholder="Tell people what to expect: the programme, who is performing, what to bring…"
+              hint="Select text to make it bold, add a link or build a list."
+              minHeightClass="min-h-44"
+            />
           </div>
         </Panel>
 
@@ -94,6 +110,85 @@ export function DetailsStep() {
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <Field label="Venue name" value={draft.venue} onChange={(e) => patch({ venue: e.target.value })} placeholder="Ansan Arts Center, Main Hall" />
             <Field label="Address" icon={<MapPin />} value={draft.address} onChange={(e) => patch({ address: e.target.value })} placeholder="Danwon-gu, Ansan" />
+          </div>
+        </Panel>
+
+        <Panel className="p-5 sm:p-6">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-text">Organizer details</h2>
+              <p className="mt-1 text-[11px] text-dim">
+                Shown on your event page so buyers know who is hosting and how to reach you.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                patch({
+                  organizerName: profile.orgName,
+                  organizerEmail: profile.orgEmail,
+                  organizerPhone: profile.orgPhone,
+                  organizerLink: profile.orgLink,
+                  organizerAbout: profile.orgBio,
+                })
+              }
+              className="rounded-lg border border-line px-3 py-2 text-xs font-bold text-amber transition-colors hover:border-gold/50 hover:text-gold focus-visible:focus-ring"
+            >
+              Use my profile details
+            </button>
+          </div>
+          <div className="space-y-5">
+            <Field
+              label="Organizer or group name"
+              icon={<User />}
+              value={draft.organizerName ?? ""}
+              onChange={(e) => patch({ organizerName: e.target.value })}
+              placeholder="Lanka Beats Korea"
+              autoComplete="organization"
+            />
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label="Contact email"
+                type="email"
+                icon={<Mail />}
+                value={draft.organizerEmail ?? ""}
+                onChange={(e) => patch({ organizerEmail: e.target.value })}
+                placeholder="hello@yourgroup.kr"
+                autoComplete="email"
+              />
+              <Field
+                label="Contact phone"
+                type="tel"
+                icon={<Phone />}
+                value={draft.organizerPhone ?? ""}
+                onChange={(e) => patch({ organizerPhone: e.target.value })}
+                placeholder="010-0000-0000"
+                autoComplete="tel"
+              />
+            </div>
+            <Field
+              label="Website or social page (optional)"
+              icon={<Globe />}
+              value={draft.organizerLink ?? ""}
+              onChange={(e) => patch({ organizerLink: e.target.value })}
+              placeholder="instagram.com/yourgroup"
+              autoComplete="url"
+            />
+            <div>
+              <label htmlFor="organizer-about" className="mb-2 block text-xs font-bold text-muted">
+                About the organizer (optional)
+              </label>
+              <textarea
+                id="organizer-about"
+                rows={3}
+                maxLength={500}
+                value={draft.organizerAbout ?? ""}
+                onChange={(e) => patch({ organizerAbout: e.target.value })}
+                placeholder="A line or two about your group and the events you run."
+                className="w-full resize-none rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-text placeholder:text-dim focus:border-gold focus:outline-none"
+              />
+              <p className="mt-1.5 text-right text-[11px] text-dim">{(draft.organizerAbout ?? "").length}/500</p>
+            </div>
           </div>
         </Panel>
 
@@ -165,7 +260,7 @@ export function DetailsStep() {
             }`}
           >
             {draft.coverUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+              // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
               <img src={draft.coverUrl} alt="Cover preview" className="absolute inset-0 size-full object-cover" />
             ) : (
               <>

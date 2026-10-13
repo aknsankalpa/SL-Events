@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   CheckCheck,
@@ -14,15 +14,18 @@ import {
   QrCode,
   Settings,
   Tag,
+  Undo2,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { organizer } from "@/lib/organizer";
+import { profileInitials } from "@/lib/profile";
 import { OrganizerProvider, useOrganizer } from "./OrganizerContext";
+import { useOrganizerProfile } from "./useOrganizerProfile";
+import { useRefundRequests } from "./useRefundRequests";
 
-type NavItem = { href: string; label: string; Icon: LucideIcon; badge?: "pending"; match?: string[] };
+type NavItem = { href: string; label: string; Icon: LucideIcon; badge?: "pending" | "requests"; match?: string[] };
 
 const nav: NavItem[] = [
   { href: "/organizer", label: "Dashboard", Icon: LayoutGrid },
@@ -30,6 +33,7 @@ const nav: NavItem[] = [
   { href: "/organizer/ticket-types", label: "Ticket types", Icon: Tag },
   { href: "/organizer/pricing", label: "Pricing", Icon: CircleDollarSign },
   { href: "/organizer/bookings", label: "Bookings", Icon: FileText },
+  { href: "/organizer/requests", label: "Requests", Icon: Undo2, badge: "requests" },
   { href: "/organizer/verify-payments", label: "Verify payments", Icon: CheckCheck, badge: "pending" },
   { href: "/organizer/attendees", label: "Attendees", Icon: Users },
   { href: "/organizer/scanner", label: "QR scanner", Icon: QrCode },
@@ -44,6 +48,9 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { pending } = useOrganizer();
+  const { pending: requestsPending } = useRefundRequests();
+  const { profile } = useOrganizerProfile();
+  const profileActive = isActive(pathname, "/organizer/profile");
 
   return (
     <div className="flex h-full flex-col">
@@ -73,6 +80,12 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
                       <span className="sr-only"> waiting</span>
                     </span>
                   )}
+                  {badge === "requests" && requestsPending > 0 && (
+                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] text-white">
+                      {requestsPending}
+                      <span className="sr-only"> waiting</span>
+                    </span>
+                  )}
                 </Link>
               </li>
             );
@@ -80,14 +93,29 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
         </ul>
       </nav>
 
-      <div className="flex items-center gap-3 border-t border-line px-4 py-4">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-gold/60 bg-surface-2 text-[13px] font-bold text-gold">
-          {organizer.initials}
-        </span>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[13px] font-bold text-text">{organizer.name}</p>
-          <p className="mt-0.5 truncate text-[11px] text-dim">{organizer.org}</p>
-        </div>
+      <div className="flex items-center gap-2 border-t border-line px-3 py-3">
+        <Link
+          href="/organizer/profile"
+          onClick={onNavigate}
+          aria-current={profileActive ? "page" : undefined}
+          aria-label="Your organizer profile"
+          className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1.5 py-1.5 transition-colors ${
+            profileActive ? "bg-gold/15" : "hover:bg-surface-2"
+          }`}
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold/60 bg-surface-2 text-[13px] font-bold text-gold">
+            {profile.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
+              <img src={profile.logoUrl} alt="" className="size-full object-cover" />
+            ) : (
+              profileInitials(profile)
+            )}
+          </span>
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block truncate text-[13px] font-bold text-text">{profile.fullName}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-dim">{profile.orgName}</span>
+          </span>
+        </Link>
         <button
           type="button"
           aria-label="Log out"
@@ -119,7 +147,10 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-1">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-line bg-black lg:block">
-        <SidebarContents />
+        {/* The sidebar reads the current path; routes with runtime params need it inside Suspense. */}
+        <Suspense fallback={<div className="h-full" aria-hidden />}>
+          <SidebarContents />
+        </Suspense>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -151,7 +182,9 @@ function Shell({ children }: { children: ReactNode }) {
             >
               <X size={20} />
             </button>
-            <SidebarContents onNavigate={() => setOpen(false)} />
+            <Suspense fallback={<div className="h-full" aria-hidden />}>
+              <SidebarContents onNavigate={() => setOpen(false)} />
+            </Suspense>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import { formatKrw } from "@/lib/format";
 import { newId, sectionColors, seatSectionTemplates, type SeatSection } from "@/lib/organizer";
 import { Panel } from "../ui";
 import { parseRows, sectionStats, useEventDraft, type SeatMapState } from "./EventDraft";
+import { ImageSeatMapBuilder, SeatPlanUpload } from "./ImageSeatMapBuilder";
 
 type Tool = "select" | "accessible" | "block";
 
@@ -29,7 +30,7 @@ function labelsFor(section: SeatSection): number[] {
   return base;
 }
 
-export function SeatMapEditor() {
+function GridSeatMapEditor() {
   const { draft, patch } = useEventDraft();
   const map = draft.seatMap;
 
@@ -493,5 +494,20 @@ function SectionForm({
         {!rowsValid && <p className="text-xs text-danger">Write rows like &ldquo;A to H&rdquo;.</p>}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The seat map step has two builders. A plan image turns into a free-form chart; otherwise the row-and-column grid
+ * builder is used, with an offer to upload an image instead.
+ */
+export function SeatMapEditor() {
+  const { draft } = useEventDraft();
+  if (draft.seatMap.layout) return <ImageSeatMapBuilder />;
+  return (
+    <>
+      <SeatPlanUpload />
+      <GridSeatMapEditor />
+    </>
   );
 }
