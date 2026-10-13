@@ -52,6 +52,17 @@ body {
     linear-gradient(180deg, #120d0a 0%, var(--color-page) 100%);
 }
 
+/*
+ * Scroll containers must be positioned so `sr-only` (position: absolute) text inside wide tables is clipped
+ * with them. Otherwise it escapes the container and makes the whole page scroll sideways on phones.
+ */
+@layer base {
+  .overflow-x-auto,
+  .overflow-auto {
+    position: relative;
+  }
+}
+
 /* Tick mark for custom checkboxes (see components/ui/Field.tsx) */
 .checkbox-box:checked {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231a1000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 8.5l3 3 6-6.5'/></svg>");
