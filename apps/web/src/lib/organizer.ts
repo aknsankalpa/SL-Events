@@ -113,6 +113,81 @@ export type OrganizerEvent = {
   draft?: EventDraft;
 };
 
+/* ---------- repairing saved events ---------- */
+
+const blankDraft: EventDraft = {
+  name: "",
+  category: "Culture",
+  tags: "",
+  description: "",
+  date: "",
+  doorsOpen: "18:00",
+  starts: "19:00",
+  venue: "",
+  address: "",
+  sellMode: "tickets",
+  coverName: "",
+  coverUrl: "",
+  ticketTypes: [],
+  seatMap: { template: "", sections: [], blocked: [], accessible: [] },
+  pricingReviewed: false,
+};
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Fills fields a draft saved by an older version doesn't have, so the editor and preview can always render it. */
+export function normalizeDraft(stored: unknown): EventDraft {
+  if (!isRecord(stored)) return blankDraft;
+  const d = stored as Partial<EventDraft>;
+  const seatMap: Partial<SeatMapState> = isRecord(d.seatMap) ? d.seatMap : {};
+  return {
+    ...blankDraft,
+    ...d,
+    ticketTypes: Array.isArray(d.ticketTypes)
+      ? (d.ticketTypes as unknown[]).filter(isRecord).map((t, i): DraftTicketType => {
+          const base: DraftTicketType = {
+            id: `type-${i}`,
+            name: "",
+            price: 0,
+            quantity: 0,
+            maxPerOrder: 10,
+            color: "#ece7dc",
+            saleNote: "",
+            perks: "",
+            visible: true,
+          };
+          return { ...base, ...(t as Partial<DraftTicketType>) };
+        })
+      : [],
+    seatMap: {
+      ...blankDraft.seatMap,
+      ...seatMap,
+      sections: Array.isArray(seatMap.sections) ? seatMap.sections.filter(isRecord) : [],
+      blocked: Array.isArray(seatMap.blocked) ? seatMap.blocked : [],
+      accessible: Array.isArray(seatMap.accessible) ? seatMap.accessible : [],
+    },
+  };
+}
+
+/** Returns a safe event for a stored value, or null when it isn't an event at all. */
+export function normalizeCreatedEvent(stored: unknown): OrganizerEvent | null {
+  if (!isRecord(stored) || typeof stored.id !== "string") return null;
+  const e = stored as Partial<OrganizerEvent> & { id: string };
+  return {
+    title: "Untitled event",
+    category: "culture",
+    dateLabel: "",
+    shortDate: "",
+    sold: 0,
+    capacity: 0,
+    revenue: 0,
+    pending: 0,
+    status: "draft",
+    ...e,
+    draft: e.draft === undefined ? undefined : normalizeDraft(e.draft),
+  };
+}
+
 export const organizerEvents: OrganizerEvent[] = [
   {
     id: "music-night",
@@ -270,7 +345,7 @@ export const rejectReasons = [
 
 /* ---------- Bookings ---------- */
 
-export type OrgBookingStatus = "paid" | "under_review" | "awaiting_payment" | "rejected" | "refunded";
+export type OrgBookingStatus = "paid" | "under_review" | "awaiting_payment" | "rejected" | "cancelled";
 
 export type OrgBooking = {
   id: string;
@@ -292,7 +367,7 @@ export const orgBookingStatus: Record<OrgBookingStatus, { label: string; tone: "
   under_review: { label: "Under review", tone: "warning" },
   awaiting_payment: { label: "Awaiting payment", tone: "neutral" },
   rejected: { label: "Rejected", tone: "danger" },
-  refunded: { label: "Refunded", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
 const generic = (created: string) => [
@@ -405,10 +480,10 @@ export const orgBookings: OrgBooking[] = [
     phone: "010-6630-9917",
     tickets: "1 × General",
     amount: 30000,
-    status: "refunded",
+    status: "cancelled",
     booked: "5 Oct",
     holders: [],
-    history: [{ label: "Refund sent", at: "6 Oct, 11:00 AM" }, ...generic("5 Oct, 9:15 AM")],
+    history: [{ label: "Booking cancelled", at: "6 Oct, 11:00 AM" }, ...generic("5 Oct, 9:15 AM")],
   },
   {
     id: "SL-41688",
@@ -440,7 +515,7 @@ export const bookingTabCounts: Record<"all" | OrgBookingStatus, number> = {
   under_review: 7,
   awaiting_payment: 9,
   rejected: 4,
-  refunded: 5,
+  cancelled: 5,
 };
 
 /* ---------- Attendees ---------- */
@@ -470,7 +545,7 @@ const baseAttendees: Attendee[] = [
     code: "SLE-P7AS-3LXK",
     booking: "SL-41702",
     state: "cancelled",
-    note: "Refunded 6 Oct",
+    note: "Cancelled 6 Oct",
   },
 ];
 

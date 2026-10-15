@@ -9,9 +9,9 @@ const icons: Record<ActivityItem["kind"], LucideIcon> = {
   system: Cog,
 };
 
-export function ActivityPanel({ items }: { items: ActivityItem[] }) {
+export function ActivityPanel({ items, bare }: { items: ActivityItem[]; bare?: boolean }) {
   return (
-    <Panel className="p-5 sm:p-6">
+    <Panel bare={bare} className="p-5 sm:p-6">
       <h2 className="text-base font-bold text-text">Recent activity</h2>
       <p className="mt-1 text-[11px] text-dim">Scans, staff and setting changes for this event</p>
 

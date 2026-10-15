@@ -171,8 +171,7 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
               onChange={(e) => setAgreeTerms(e.target.checked)}
               label={
                 <>
-                  I agree to the <Link href="/terms" className="text-text hover:underline">Terms of use</Link> and the{" "}
-                  <Link href="/help#faq" className="text-text hover:underline">Refund policy</Link>. (Required)
+                  I agree to the <Link href="/terms" className="text-text hover:underline">Terms of use</Link>. (Required)
                 </>
               }
             />

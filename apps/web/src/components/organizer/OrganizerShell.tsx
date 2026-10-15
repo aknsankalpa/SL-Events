@@ -14,7 +14,6 @@ import {
   QrCode,
   Settings,
   Tag,
-  Undo2,
   Users,
   X,
   type LucideIcon,
@@ -23,9 +22,8 @@ import { Logo } from "@/components/ui/Logo";
 import { profileInitials } from "@/lib/profile";
 import { OrganizerProvider, useOrganizer } from "./OrganizerContext";
 import { useOrganizerProfile } from "./useOrganizerProfile";
-import { useRefundRequests } from "./useRefundRequests";
 
-type NavItem = { href: string; label: string; Icon: LucideIcon; badge?: "pending" | "requests"; match?: string[] };
+type NavItem = { href: string; label: string; Icon: LucideIcon; badge?: "pending"; match?: string[] };
 
 const nav: NavItem[] = [
   { href: "/organizer", label: "Dashboard", Icon: LayoutGrid },
@@ -33,7 +31,6 @@ const nav: NavItem[] = [
   { href: "/organizer/ticket-types", label: "Ticket types", Icon: Tag },
   { href: "/organizer/pricing", label: "Pricing", Icon: CircleDollarSign },
   { href: "/organizer/bookings", label: "Bookings", Icon: FileText },
-  { href: "/organizer/requests", label: "Requests", Icon: Undo2, badge: "requests" },
   { href: "/organizer/verify-payments", label: "Verify payments", Icon: CheckCheck, badge: "pending" },
   { href: "/organizer/attendees", label: "Attendees", Icon: Users },
   { href: "/organizer/scanner", label: "QR scanner", Icon: QrCode },
@@ -48,7 +45,6 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { pending } = useOrganizer();
-  const { pending: requestsPending } = useRefundRequests();
   const { profile } = useOrganizerProfile();
   const profileActive = isActive(pathname, "/organizer/profile");
 
@@ -77,12 +73,6 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
                   {badge === "pending" && pending > 0 && (
                     <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] text-white">
                       {pending}
-                      <span className="sr-only"> waiting</span>
-                    </span>
-                  )}
-                  {badge === "requests" && requestsPending > 0 && (
-                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[10px] text-white">
-                      {requestsPending}
                       <span className="sr-only"> waiting</span>
                     </span>
                   )}

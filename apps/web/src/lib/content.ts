@@ -82,16 +82,6 @@ export const notifications: NotificationItem[] = [
     time: "Tue",
     action: { label: "View event", href: "/events" },
   },
-  {
-    id: "n7",
-    group: "This week",
-    kind: "booking",
-    tone: "neutral",
-    icon: "receipt",
-    title: "Refund sent",
-    body: "₩12,000 for SL-41402 was sent to your Shinhan Bank account.",
-    time: "Mon",
-  },
 ];
 
 export type NotificationSetting = { id: string; label: string; hint: string; on: boolean; locked?: boolean };
@@ -112,7 +102,6 @@ export const topicSettings: NotificationSetting[] = [
 export const helpCategories = [
   { id: "booking", title: "Booking & payment", articles: 8, icon: "bank" },
   { id: "tickets", title: "Tickets & QR codes", articles: 6, icon: "qr" },
-  { id: "refunds", title: "Refunds & cancellations", articles: 5, icon: "receipt" },
   { id: "account", title: "Account & login", articles: 4, icon: "user" },
 ] as const;
 
@@ -123,7 +112,7 @@ export const faqs = [
   },
   {
     q: "I sent the wrong amount. What should I do?",
-    a: "Send the difference to the same account with the same memo, then upload both screenshots. If you sent too much, contact us and we will refund the extra amount to your refund account.",
+    a: "Send the difference to the same account with the same memo, then upload both screenshots. If you sent too much, contact us with your booking number and we will help you.",
   },
   {
     q: "Can I pay from a friend's bank account?",
@@ -132,10 +121,6 @@ export const faqs = [
   {
     q: "My proof was rejected. Do I lose my seats?",
     a: "No. Your seats stay held while we sort it out. We will tell you why the proof did not match, and you can upload a new screenshot from your booking.",
-  },
-  {
-    q: "How do I get a refund?",
-    a: "Refunds are available until 3 days before the event. Contact us with your booking number and we will send the money to the refund account saved in your profile.",
   },
   {
     q: "Can I give my ticket to someone else?",

@@ -4,7 +4,6 @@ import { useMemo, useSyncExternalStore } from "react";
 import { EyeOff } from "lucide-react";
 import { EventDetailsView } from "@/components/events/EventDetailsView";
 import { getEvent } from "@/lib/data";
-import { organizerEvents } from "@/lib/organizer";
 import { getServerSnapshot, getSnapshot, subscribe } from "@/lib/organizerStore";
 import { draftToEventItem } from "@/lib/previewEvent";
 
@@ -15,8 +14,8 @@ const publicSlugFor: Record<string, string> = {
 };
 
 /**
- * Renders an organizer's event exactly as the public event page would, from the saved draft. It reads the same
- * browser store as the organizer portal, so it works inside the preview frame.
+ * Renders an organizer's event exactly as the public event page would (and nothing else), from the saved draft.
+ * It reads the same browser store as the organizer portal, so it works inside the preview frame.
  */
 export function DraftPreview({ id }: { id: string }) {
   const created = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -29,12 +28,11 @@ export function DraftPreview({ id }: { id: string }) {
   const view = useMemo(() => {
     const draftEvent = created.find((e) => e.id === id);
     if (draftEvent?.draft) {
-      return { event: draftToEventItem(draftEvent.draft, id), coverUrl: draftEvent.draft.coverUrl || undefined, status: draftEvent.status };
+      return { event: draftToEventItem(draftEvent.draft, id), coverUrl: draftEvent.draft.coverUrl || undefined };
     }
     const slug = publicSlugFor[id];
     const live = slug ? getEvent(slug) : undefined;
-    const known = organizerEvents.find((e) => e.id === id);
-    if (live) return { event: live, coverUrl: undefined, status: known?.status ?? "on_sale" };
+    if (live) return { event: live, coverUrl: undefined };
     return null;
   }, [created, id]);
 
@@ -52,13 +50,5 @@ export function DraftPreview({ id }: { id: string }) {
     );
   }
 
-  return (
-    <>
-      <p className="border-b border-amber/30 bg-amber/10 px-5 py-2 text-center text-xs font-bold text-amber">
-        {view.status === "draft" ? "Draft preview" : view.status === "in_review" ? "Preview · in review" : "Live event"}
-        <span className="font-normal text-muted"> · buyers can&apos;t see this page until it is published</span>
-      </p>
-      <EventDetailsView event={view.event} preview coverUrl={view.coverUrl} />
-    </>
-  );
+  return <EventDetailsView event={view.event} preview coverUrl={view.coverUrl} />;
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Accessibility, Ban, ChevronDown, Eye, EyeOff, GripVertical, MousePointer2, Plus, Redo2, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Accessibility, Ban, Eye, EyeOff, GripVertical, MousePointer2, Plus, Redo2, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatKrw } from "@/lib/format";
 import { newId, sectionColors, seatSectionTemplates, type SeatSection } from "@/lib/organizer";
 import { Panel } from "../ui";
 import { parseRows, sectionStats, useEventDraft, type SeatMapState } from "./EventDraft";
 import { ImageSeatMapBuilder, SeatPlanUpload } from "./ImageSeatMapBuilder";
+import { Select } from "@/components/ui/Select";
 
 type Tool = "select" | "accessible" | "block";
 
@@ -139,17 +140,16 @@ function GridSeatMapEditor() {
       <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-dim">
         <label htmlFor="template">Start from</label>
         <div className="relative">
-          <select
+          <Select
             id="template"
             value={map.template}
             onChange={(e) => loadTemplate(e.target.value)}
-            className="h-11 cursor-pointer appearance-none rounded-xl border border-line bg-surface pl-4 pr-10 text-[13px] font-bold text-text focus:border-gold focus:outline-none"
+            className="h-11 rounded-xl border border-line bg-surface pl-4 pr-3 text-[13px] font-bold text-text focus:border-gold focus:outline-none"
           >
             {Object.keys(seatSectionTemplates).map((t) => (
               <option key={t}>{t}</option>
             ))}
-          </select>
-          <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-3.5 text-muted" />
+          </Select>
         </div>
       </div>
 
@@ -447,10 +447,10 @@ function SectionForm({
           </label>
           <label className="block">
             <span className={lab}>Seat type</span>
-            <select value={s.seatType} onChange={(e) => onChange({ seatType: e.target.value as SeatSection["seatType"] })} className={box}>
+            <Select value={s.seatType} onChange={(e) => onChange({ seatType: e.target.value as SeatSection["seatType"] })} className={box}>
               <option>Single</option>
               <option>Couple</option>
-            </select>
+            </Select>
           </label>
           <label className="block">
             <span className={lab}>Rows</span>
@@ -484,11 +484,11 @@ function SectionForm({
           </label>
           <label className="block">
             <span className={lab}>Numbering</span>
-            <select value={s.numbering} onChange={(e) => onChange({ numbering: e.target.value as SeatSection["numbering"] })} className={box}>
+            <Select value={s.numbering} onChange={(e) => onChange({ numbering: e.target.value as SeatSection["numbering"] })} className={box}>
               <option>1 → 16</option>
               <option>16 → 1</option>
               <option>Odd / even</option>
-            </select>
+            </Select>
           </label>
         </div>
         {!rowsValid && <p className="text-xs text-danger">Write rows like &ldquo;A to H&rdquo;.</p>}

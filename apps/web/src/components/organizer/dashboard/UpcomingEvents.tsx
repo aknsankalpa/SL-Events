@@ -20,15 +20,19 @@ function inDays(days: number) {
   return `in ${days} days`;
 }
 
+/** On desktop the dashboard is one fixed screen, so this panel fills its slot and the list scrolls inside it. */
 export function UpcomingEvents({ events }: { events: OrganizerEvent[] }) {
   const list = upcomingOf(events);
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6" aria-label="Upcoming events">
-      <div className="flex items-start justify-between gap-3">
+    <section
+      className="flex flex-col rounded-2xl border border-line bg-surface p-4 sm:p-5 lg:min-h-0"
+      aria-label="Upcoming events"
+    >
+      <div className="flex shrink-0 items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-text">Upcoming events</h2>
-          <p className="mt-1 text-[11px] text-dim">
+          <p className="mt-1 text-[11px] text-dim lg:[@media(max-height:760px)]:hidden">
             {list.length === 0 ? "Nothing scheduled" : `${list.length} event${list.length === 1 ? "" : "s"} coming up`}
           </p>
         </div>
@@ -38,7 +42,7 @@ export function UpcomingEvents({ events }: { events: OrganizerEvent[] }) {
       </div>
 
       {list.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-line p-6 text-center">
+        <div className="mt-4 rounded-xl border border-dashed border-line p-6 text-center">
           <p className="text-sm text-muted">You have no upcoming events.</p>
           <Link
             href="/organizer/events/new"
@@ -48,7 +52,7 @@ export function UpcomingEvents({ events }: { events: OrganizerEvent[] }) {
           </Link>
         </div>
       ) : (
-        <ul className="mt-5 space-y-3">
+        <ul className="mt-4 space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1 lg:[@media(max-height:760px)]:mt-3">
           {list.map((e) => {
             const d = new Date(`${e.startsAt.slice(0, 10)}T00:00:00Z`);
             const days = daysUntil(e.startsAt);
@@ -57,37 +61,38 @@ export function UpcomingEvents({ events }: { events: OrganizerEvent[] }) {
               <li key={e.id}>
                 <Link
                   href={`/organizer/events/${e.id}/edit`}
-                  className="flex items-center gap-4 rounded-xl border border-line bg-surface-2 p-3.5 transition-colors hover:border-gold/50 focus-visible:focus-ring"
+                  className="block rounded-xl border border-line bg-surface-2 p-3 transition-colors hover:border-gold/50 focus-visible:focus-ring"
                 >
-                  <span
-                    aria-hidden
-                    className="flex size-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-b from-gold to-amber text-ink"
-                  >
-                    <span className="text-[10px] font-bold leading-none tracking-wider">{MONTHS[d.getUTCMonth()]}</span>
-                    <span className="mt-1 text-xl font-bold leading-none">{d.getUTCDate()}</span>
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-bold leading-snug text-text">{e.title}</span>
-                    {e.venue && (
-                      <span className="mt-1 flex items-center gap-1.5 truncate text-[11px] text-dim">
-                        <MapPin size={11} aria-hidden className="shrink-0" /> {e.venue}
-                      </span>
-                    )}
-                    <span className="mt-3 flex items-center gap-3">
-                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-line" role="presentation">
-                        <span
-                          className="block h-full rounded-full bg-gradient-to-r from-amber to-gold"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </span>
-                      <span className="shrink-0 text-[11px] text-muted">
-                        {e.sold}/{e.capacity}
+                  <span className="flex items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="flex size-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-b from-gold to-amber text-ink"
+                    >
+                      <span className="text-[9px] font-bold leading-none tracking-wider">{MONTHS[d.getUTCMonth()]}</span>
+                      <span className="mt-1 text-lg font-bold leading-none">{d.getUTCDate()}</span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold leading-snug text-text">{e.title}</span>
+                      <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-dim">
+                        <span className="shrink-0 font-bold text-amber">{inDays(days)}</span>
+                        {e.venue && (
+                          <>
+                            <MapPin size={11} aria-hidden className="shrink-0" />
+                            <span className="truncate">{e.venue}</span>
+                          </>
+                        )}
                       </span>
                     </span>
-                    <span className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold text-amber">{inDays(days)}</span>
-                      <Badge tone={tone[e.status]}>{eventStatusLabel[e.status]}</Badge>
+                    <Badge tone={tone[e.status]} className="shrink-0">
+                      {eventStatusLabel[e.status]}
+                    </Badge>
+                  </span>
+                  <span className="mt-2.5 flex items-center gap-3">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-line" role="presentation">
+                      <span className="block h-full rounded-full bg-gradient-to-r from-amber to-gold" style={{ width: `${pct}%` }} />
+                    </span>
+                    <span className="shrink-0 text-[11px] text-muted">
+                      {e.sold}/{e.capacity}
                     </span>
                   </span>
                 </Link>

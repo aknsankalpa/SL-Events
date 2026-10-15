@@ -57,27 +57,31 @@ export function StatCards({ pending }: { pending: number }) {
   ];
 
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map(({ label, value, Icon, tone, chip, note }) => (
-        <li key={label} className="min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <span className={`flex size-10 items-center justify-center rounded-xl sm:size-11 ${tones[tone]}`}>
-              <Icon size={20} aria-hidden />
+        <li key={label} className="min-w-0 rounded-2xl border border-line bg-surface p-3.5 sm:p-4">
+          <div className="flex items-center gap-3">
+            <span className={`flex size-10 shrink-0 items-center justify-center rounded-xl lg:hidden xl:flex ${tones[tone]}`}>
+              <Icon size={18} aria-hidden />
             </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-muted">{label}</p>
+              <p className="mt-1 truncate text-[19px] font-bold leading-none text-text sm:text-[22px] lg:text-[20px] 2xl:text-[22px]">{value}</p>
+            </div>
+          </div>
+          <div className="mt-2.5 flex min-w-0 items-center gap-2 text-[11px] lg:hidden lg:[@media(min-height:820px)]:flex">
             {chip && (
               <span
-                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold sm:px-2.5 sm:text-[11px] ${
+                className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   chip.warn ? "bg-amber/15 text-amber" : "bg-success/15 text-success"
                 }`}
               >
-                {chip.up && <ArrowUpRight size={12} aria-hidden />}
+                {chip.up && <ArrowUpRight size={11} aria-hidden />}
                 {chip.text}
               </span>
             )}
+            <span className="truncate text-dim">{note}</span>
           </div>
-          <p className="mt-4 text-xs font-bold text-muted sm:mt-5">{label}</p>
-          <p className="mt-1.5 text-[20px] font-bold leading-tight text-text sm:text-[28px] sm:leading-none">{value}</p>
-          <p className="mt-2.5 text-[11px] leading-snug text-dim sm:mt-3">{note}</p>
         </li>
       ))}
     </ul>

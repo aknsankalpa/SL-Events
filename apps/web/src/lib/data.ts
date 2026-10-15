@@ -324,7 +324,6 @@ export const currentUser = {
   language: "English",
   memberSince: "March 2026",
   memberSinceShort: "Mar 2026",
-  refundAccount: { bank: "Shinhan Bank", number: "110-123-456789", holder: "KASUN PERERA" },
 };
 
 export const banks = [

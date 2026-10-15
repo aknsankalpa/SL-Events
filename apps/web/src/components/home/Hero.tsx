@@ -1,6 +1,7 @@
-import { AlertTriangle, CalendarDays, ChevronDown, MapPin, Mic2, QrCode, Search } from "lucide-react";
+import { AlertTriangle, CalendarDays, MapPin, Mic2, QrCode, Search } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { currentUser, events, cities } from "@/lib/data";
+import { Select } from "@/components/ui/Select";
 
 export function ActionBanner() {
   return (
@@ -55,18 +56,17 @@ export function Hero() {
             <label className="flex items-center gap-2 border-line px-3 sm:border-l">
               <MapPin size={16} className="text-muted" aria-hidden />
               <span className="sr-only">City</span>
-              <select
+              <Select
                 name="city"
                 defaultValue="Seoul"
-                className="h-11 appearance-none bg-transparent pr-1 text-sm text-muted focus:outline-none"
+                className="h-11 bg-transparent pr-3 text-sm text-muted focus:outline-none"
               >
                 {cities.map((c) => (
                   <option key={c} value={c} className="bg-surface text-text">
                     {c}
                   </option>
                 ))}
-              </select>
-              <ChevronDown size={14} className="text-muted" aria-hidden />
+              </Select>
             </label>
             <button
               type="submit"

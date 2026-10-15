@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, CheckCheck, ChevronDown, Download, FileText, Grid2x2, Plus, Users } from "lucide-react";
-import { EventThumb } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/StatusBadge";
 import { Button, LinkButton } from "@/components/ui/Button";
-import { formatKrw } from "@/lib/format";
 import {
   dailySales,
   dashboardStats,
@@ -18,14 +15,13 @@ import {
   verifyQueue,
 } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
-import { useRefundRequests } from "./useRefundRequests";
 import { EventCalendar } from "./dashboard/EventCalendar";
-import { RecentOrders } from "./dashboard/RecentOrders";
+import { ActivityTabs } from "./dashboard/ActivityTabs";
 import { SalesChart } from "./dashboard/SalesChart";
 import { StatCards } from "./dashboard/StatCards";
-import { TicketMix } from "./dashboard/TicketMix";
 import { UpcomingEvents } from "./dashboard/UpcomingEvents";
 import { downloadCsv } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 const periods = [
   { days: 7, label: "Last 7 days" },
@@ -37,7 +33,6 @@ const reportIcons = { sales: FileText, bookings: FileText, attendees: Users, ver
 
 export function Dashboard() {
   const { events, pending } = useOrganizer();
-  const { pending: requestsPending } = useRefundRequests();
   const [days, setDays] = useState(14);
   const [eventFilter, setEventFilter] = useState("all");
 
@@ -48,23 +43,23 @@ export function Dashboard() {
   const oldest = verifyQueue[0]?.waited.replace(" ago", "");
 
   return (
-    <div className="mx-auto max-w-[96rem]">
-      <header className="relative mb-6 overflow-hidden rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_140%_at_0%_0%,rgb(150_20_20/0.35),transparent_70%),radial-gradient(40%_120%_at_100%_0%,rgb(110_80_20/0.35),transparent_70%)]"
-        />
-        <div className="relative flex flex-wrap items-end justify-between gap-5">
+    // On desktop the dashboard is exactly one screen tall (the page never scrolls) and the long lists scroll inside
+    // their own panels. The floor keeps very short windows scrollable instead of crushing the panels. Phones stack.
+    <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-4 lg:h-[max(calc(100dvh-3.5rem),32rem)]">
+      <header className="relative rounded-2xl border border-line bg-surface px-4 py-3 sm:px-5">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className="absolute inset-0 bg-[radial-gradient(60%_160%_at_0%_0%,rgb(150_20_20/0.35),transparent_70%),radial-gradient(40%_140%_at_100%_0%,rgb(110_80_20/0.35),transparent_70%)]" />
+        </div>
+        <div className="relative flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-amber">{organizer.org}</p>
-            <h1 className="mt-2 font-display text-[28px] font-bold leading-tight text-text sm:text-[34px]">
+            <h1 className="font-display text-[22px] font-bold leading-tight text-text sm:text-[26px] lg:text-[22px] xl:text-[26px]">
               Welcome back, {organizer.name.split(" ")[0]}
             </h1>
-            <p className="mt-2 text-sm text-muted">
-              Here&apos;s how your events are doing. {dashboardStats.soldThisWeek} tickets sold this week.
+            <p className="mt-1 text-[13px] text-muted">
+              <span className="font-bold text-amber">{organizer.org}</span> · {dashboardStats.soldThisWeek} tickets sold this week
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <SelectPill label="Period" icon={<CalendarDays size={14} />} value={String(days)} onChange={(v) => setDays(Number(v))}>
               {periods.map((p) => (
                 <option key={p.days} value={p.days}>
@@ -81,8 +76,8 @@ export function Dashboard() {
               ))}
             </SelectPill>
             <ReportMenu periodLabel={periodLabel} />
-            <LinkButton href="/organizer/events/new" variant="outline" className="h-11">
-              <Plus size={16} aria-hidden /> Create event
+            <LinkButton href="/organizer/events/new" variant="outline" size="sm">
+              <Plus size={16} aria-hidden /> <span>Create<span className="lg:hidden xl:inline"> event</span></span>
             </LinkButton>
           </div>
         </div>
@@ -91,129 +86,37 @@ export function Dashboard() {
       {pending > 0 && (
         <div
           role="status"
-          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber/40 bg-amber/10 px-5 py-4"
+          className="flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-2xl border border-amber/40 bg-amber/10 px-4 py-2 text-[13px] text-text sm:px-5"
         >
-          <p className="text-[13px] text-text">
-            <strong className="font-bold">{pending} payments</strong> are waiting for verification
-            {oldest ? ` · oldest ${oldest}` : ""}. Buyers get their tickets as soon as you approve.
-          </p>
-          <Link href="/organizer/verify-payments" className="flex items-center gap-1.5 text-xs font-bold text-amber hover:text-gold">
-            Review payments <ArrowRight size={13} aria-hidden />
-          </Link>
-        </div>
-      )}
-
-      {requestsPending > 0 && (
-        <div
-          role="status"
-          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-5 py-4"
-        >
-          <p className="text-[13px] text-text">
-            <strong className="font-bold">
-              {requestsPending} refund or cancellation request{requestsPending === 1 ? " is" : "s are"}
-            </strong>{" "}
-            waiting for your decision.
-          </p>
-          <Link href="/organizer/requests" className="flex items-center gap-1.5 text-xs font-bold text-amber hover:text-gold">
-            Review requests <ArrowRight size={13} aria-hidden />
-          </Link>
+          {pending > 0 && (
+            <p className="flex flex-wrap items-center gap-x-3">
+              <span>
+                <strong className="font-bold">{pending} payments</strong> to verify
+                {oldest ? ` · oldest ${oldest}` : ""}
+              </span>
+              <Link href="/organizer/verify-payments" className="flex items-center gap-1 text-xs font-bold text-amber hover:text-gold">
+                Review payments <ArrowRight size={13} aria-hidden />
+              </Link>
+            </p>
+          )}
         </div>
       )}
 
       <StatCards pending={pending} />
 
-      {/* On phones the upcoming events come straight after the numbers; on wide screens they sit in the side column. */}
-      <div className="mt-6 xl:hidden">
-        <UpcomingEvents events={shownEvents} />
-      </div>
-
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_23.5rem]">
-        <div className="min-w-0 space-y-6">
+      {/* "contents" keeps these wrappers out of the way on phones (one stacked column) and makes them the two
+          desktop columns. Upcoming events come first on phones, straight after the numbers. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_23rem]">
+        <div className="contents lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-4">
           <SalesChart series={series} avgPrice={dashboardStats.avgTicketPrice} periodLabel={periodLabel} />
-          <RecentOrders />
-
-          <section className="overflow-hidden rounded-2xl border border-line bg-surface" aria-label="Event performance">
-            <div className="p-5 pb-4 sm:p-6 sm:pb-4">
-              <h2 className="text-base font-bold text-text">Event performance</h2>
-              <p className="mt-1 text-[11px] text-dim">Sales and payments to check, per event</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-left text-[13px]">
-                <thead className="bg-surface-2 text-[10px] uppercase tracking-wider text-dim">
-                  <tr>
-                    {["Event", "Date", "Sold", "Revenue", "To verify"].map((h) => (
-                      <th key={h} scope="col" className="whitespace-nowrap px-5 py-3 font-bold">
-                        {h}
-                      </th>
-                    ))}
-                    <th scope="col" className="px-5">
-                      <span className="sr-only">Report</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shownEvents.map((e) => (
-                    <tr key={e.id} className="border-t border-line">
-                      <td className="px-5 py-4">
-                        <span className="flex items-center gap-3 font-bold text-text">
-                          <EventThumb category={e.category} size={30} />
-                          <span className="whitespace-nowrap">{e.title}</span>
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-muted">{e.shortDate}</td>
-                      <td className="px-5 py-4">
-                        <div className="w-32">
-                          <p className="mb-1.5 text-[11px] text-muted">
-                            {e.sold} / {e.capacity}
-                          </p>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-line">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-amber to-gold"
-                              style={{ width: `${e.capacity ? (e.sold / e.capacity) * 100 : 0}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 font-bold text-text">{formatKrw(e.revenue)}</td>
-                      <td className="px-5 py-4">
-                        {e.pending > 0 ? <Badge tone="warning">{e.pending} pending</Badge> : <span className="text-dim">—</span>}
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-line text-text hover:bg-surface-2"
-                          onClick={() =>
-                            downloadCsv(`${e.id}-report.csv`, [
-                              ["Event", "Date", "Sold", "Capacity", "Revenue (KRW)", "Payments to verify"],
-                              [e.title, e.shortDate, e.sold, e.capacity, e.revenue, e.pending],
-                            ])
-                          }
-                        >
-                          <Download size={14} aria-hidden /> Report
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {shownEvents.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-5 py-8 text-center text-sm text-muted">
-                        No events to show.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <ActivityTabs events={shownEvents} slices={byTicket.map((t) => ({ label: t.label, sold: t.sold }))} />
         </div>
 
-        <div className="min-w-0 space-y-6">
-          <div className="hidden xl:block">
+        <div className="contents lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[minmax(7.5rem,1fr)_auto] lg:gap-4">
+          <div className="order-first lg:order-none lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)]">
             <UpcomingEvents events={shownEvents} />
           </div>
           <EventCalendar events={events} />
-          <TicketMix slices={byTicket.map((t) => ({ label: t.label, sold: t.sold }))} />
         </div>
       </div>
     </div>
@@ -234,17 +137,16 @@ function SelectPill({
   children: React.ReactNode;
 }) {
   return (
-    <label className="relative flex h-11 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 text-[13px] font-bold text-text focus-within:border-gold">
-      <span className="text-muted">{icon}</span>
+    <label className="relative flex h-9 items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 text-[13px] font-bold text-text focus-within:border-gold">
+      <span className="text-muted lg:hidden xl:block">{icon}</span>
       <span className="sr-only">{label}</span>
-      <select
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full max-w-[11rem] cursor-pointer appearance-none bg-transparent pr-6 focus:outline-none"
+        className="h-full max-w-[11rem] bg-transparent pr-3 focus:outline-none"
       >
         {children}
-      </select>
-      <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-3 text-muted" />
+      </Select>
     </label>
   );
 }
@@ -293,8 +195,10 @@ function ReportMenu({ periodLabel }: { periodLabel: string }) {
 
   return (
     <div ref={ref} className="relative">
-      <Button aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Download size={16} aria-hidden /> Download report <ChevronDown size={14} aria-hidden />
+      <Button size="sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Download size={16} aria-hidden /> <span className="lg:hidden xl:inline">Download report</span>
+        <span className="hidden lg:inline xl:hidden">Report</span>
+        <ChevronDown size={14} aria-hidden />
       </Button>
       {open && (
         <div

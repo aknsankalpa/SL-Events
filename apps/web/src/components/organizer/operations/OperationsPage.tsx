@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import { Download, Eye, PauseCircle, PlayCircle, ScanLine, ShieldAlert, UserCheck, Users, UserX, Ban } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Ban, Download, Eye, ScanLine, ShieldAlert, UserCheck, Users, UserX, type LucideIcon } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
+import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/StatusBadge";
 import { statsFor } from "@/lib/operations";
 import { attendees, daysUntil, eventStatusLabel } from "@/lib/organizer";
 import { useOrganizer } from "../OrganizerContext";
-import { Dialog, downloadCsv, OrgPageHeader, Panel, StatCard } from "../ui";
+import { downloadCsv, OrgPageHeader, Panel, TabbedPanel } from "../ui";
 import { ActivityPanel } from "./ActivityPanel";
 import { CheckInProgress } from "./CheckInProgress";
 import { EntryStatistics } from "./EntryStatistics";
@@ -42,8 +43,7 @@ export function OperationsPage({ id }: { id: string }) {
 function Operations({ id }: { id: string }) {
   const { events, setEventId } = useOrganizer();
   const event = events.find((e) => e.id === id)!;
-  const { ops, addStaff, updateStaff, removeStaff, saveSettings, setPaused } = useEventOps(id);
-  const [confirmPause, setConfirmPause] = useState(false);
+  const { ops, addStaff, updateStaff, removeStaff, saveSettings } = useEventOps(id);
 
   if (event.status === "draft") {
     return (
@@ -76,11 +76,9 @@ function Operations({ id }: { id: string }) {
   const left = Math.max(0, stats.expected - stats.checkedIn);
   const days = event.startsAt ? daysUntil(event.startsAt) : null;
 
-  const phase = ops.paused
-    ? { tone: "warning" as const, label: "Check-in paused" }
-    : stats.live
-      ? { tone: "success" as const, label: "Check-in live" }
-      : { tone: "neutral" as const, label: days !== null && days > 0 ? `Opens in ${days} days` : eventStatusLabel[event.status] };
+  const phase = stats.live
+    ? { tone: "success" as const, label: "Check-in live" }
+    : { tone: "neutral" as const, label: days !== null && days > 0 ? `Opens in ${days} days` : eventStatusLabel[event.status] };
 
   function exportCheckIns() {
     downloadCsv(`${id}-check-ins.csv`, [
@@ -90,102 +88,97 @@ function Operations({ id }: { id: string }) {
   }
 
   return (
-    <>
-      <OrgPageHeader
-        crumbs={[{ label: "Events", href: "/organizer/events" }, { label: event.title }, { label: "Operations" }]}
-        title="Event operations"
-        titleAside={
-          <Badge tone={phase.tone} dot={phase.tone === "success"}>
-            {phase.label}
-          </Badge>
-        }
-        actions={
-          <>
-            <Button
-              variant="outline"
-              className="border-line bg-surface text-text hover:bg-surface-2"
-              onClick={() => (ops.paused ? setPaused(false) : setConfirmPause(true))}
-            >
-              {ops.paused ? <PlayCircle size={16} aria-hidden /> : <PauseCircle size={16} aria-hidden />}
-              {ops.paused ? "Resume check-in" : "Pause check-in"}
-            </Button>
-            <Button variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={exportCheckIns}>
-              <Download size={16} aria-hidden /> Export
-            </Button>
-            <LinkButton href="/organizer/scanner" onClick={() => setEventId(id)}>
-              <ScanLine size={16} aria-hidden /> Open scanner
-            </LinkButton>
-          </>
-        }
-      />
+    // On desktop this is exactly one screen tall (the page never scrolls) and each tab body scrolls inside its card.
+    // The floor keeps very short windows scrollable instead of crushing the cards. Phones stack and scroll.
+    <div className="flex flex-col gap-4 lg:h-[max(calc(100dvh-3.5rem),32rem)]">
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <Breadcrumbs crumbs={[{ label: "Events", href: "/organizer/events" }, { label: event.title }, { label: "Operations" }]} />
+          <div className="mt-1.5 flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-[26px] font-bold leading-tight text-text sm:text-[28px]">Event operations</h1>
+            <Badge tone={phase.tone} dot={phase.tone === "success"}>
+              {phase.label}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button size="sm" variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={exportCheckIns}>
+            <Download size={15} aria-hidden /> Export
+          </Button>
+          <LinkButton size="sm" href="/organizer/scanner" onClick={() => setEventId(id)}>
+            <ScanLine size={15} aria-hidden /> Open scanner
+          </LinkButton>
+        </div>
+      </header>
 
-      <p className="-mt-3 mb-6 text-sm text-muted">{event.title}</p>
-
-      {ops.paused && (
-        <p
-          role="status"
-          className="mb-5 flex items-start gap-3 rounded-xl border border-amber/40 bg-amber/10 px-4 py-3 text-[13px] text-text"
-        >
-          <PauseCircle size={16} aria-hidden className="mt-0.5 shrink-0 text-amber" />
-          Check-in is paused. Every scanner shows &ldquo;Check-in paused&rdquo; and admits no one until you resume.
-        </p>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <OpsStat
           label="Checked in"
           value={`${stats.checkedIn} / ${stats.expected}`}
           Icon={UserCheck}
           sub={stats.expected ? `${Math.round((stats.checkedIn / stats.expected) * 100)}% of guests` : "No guests yet"}
         />
-        <StatCard label="Still to arrive" value={left} Icon={Users} sub="Paid tickets not yet scanned" />
-        <StatCard
+        <OpsStat label="Still to arrive" value={String(left)} Icon={Users} sub="Paid tickets not yet scanned" />
+        <OpsStat
           label="Refused scans"
-          value={refused}
+          value={String(refused)}
           Icon={Ban}
-          subTone={refused > 0 ? "warn" : "default"}
+          warn={refused > 0}
           sub={refused > 0 ? "Already used, wrong event or unknown" : "None so far"}
         />
-        <StatCard
+        <OpsStat
           label="Staff on duty"
           value={`${activeStaff} / ${ops.staff.length}`}
           Icon={invited > 0 ? UserX : UserCheck}
-          subTone={invited > 0 ? "warn" : "default"}
+          warn={invited > 0}
           sub={invited > 0 ? `${invited} invite${invited === 1 ? "" : "s"} not accepted yet` : "Everyone has accepted"}
         />
-      </div>
+      </ul>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-2">
-        <div className="min-w-0 space-y-6">
-          <CheckInProgress stats={stats} paused={ops.paused} />
-          <EntryStatistics stats={stats} />
-          <ActivityPanel items={ops.activity} />
+      {/* "contents" keeps the left wrapper out of the way on phones and makes it one desktop column. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+        <div className="contents lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-4">
+          <CheckInProgress stats={stats} />
+          <TabbedPanel
+            label="Entry statistics and activity"
+            tabs={[
+              { id: "entry", label: "Entry statistics", content: <EntryStatistics bare stats={stats} /> },
+              { id: "activity", label: "Recent activity", content: <ActivityPanel bare items={ops.activity} /> },
+            ]}
+          />
         </div>
-        <div className="min-w-0 space-y-6">
-          <StaffPanel staff={ops.staff} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} />
-          <EventDaySettings settings={ops.settings} onSave={saveSettings} />
+        <TabbedPanel
+          label="Staff and event-day settings"
+          tabs={[
+            {
+              id: "staff",
+              label: "Event staff",
+              content: <StaffPanel bare staff={ops.staff} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} />,
+            },
+            { id: "settings", label: "Event-day settings", content: <EventDaySettings bare settings={ops.settings} onSave={saveSettings} /> },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+function OpsStat({ label, value, sub, Icon, warn }: { label: string; value: string; sub: string; Icon: LucideIcon; warn?: boolean }) {
+  return (
+    <li className="min-w-0 rounded-xl border border-line bg-surface p-3.5">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gold/15 text-gold lg:hidden xl:flex">
+          <Icon size={16} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-bold text-muted">{label}</p>
+          <p className="mt-1 truncate text-[20px] font-bold leading-none text-text">{value}</p>
         </div>
       </div>
-
-      <Dialog open={confirmPause} onClose={() => setConfirmPause(false)} title="Pause check-in?">
-        <p className="text-sm leading-relaxed text-muted">
-          Every scanner will stop admitting guests until you resume. Use this for an emergency or a stop in the programme. Guests
-          already inside are not affected.
-        </p>
-        <div className="mt-6 flex justify-end gap-3">
-          <Button variant="ghost" onClick={() => setConfirmPause(false)}>
-            Keep going
-          </Button>
-          <Button
-            onClick={() => {
-              setPaused(true);
-              setConfirmPause(false);
-            }}
-          >
-            Pause check-in
-          </Button>
-        </div>
-      </Dialog>
-    </>
+      {/* The note is dropped on short desktop windows so the cards stay one line shorter. */}
+      <p className={`mt-2 truncate text-[11px] ${warn ? "text-amber" : "text-dim"} lg:hidden lg:[@media(min-height:820px)]:block`}>
+        {sub}
+      </p>
+    </li>
   );
 }

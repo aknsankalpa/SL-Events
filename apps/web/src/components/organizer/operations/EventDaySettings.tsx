@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { defaultSettings, lockedSettings, type OpsSettings } from "@/lib/operations";
 import { Panel } from "../ui";
+import { TimePicker } from "@/components/ui/Pickers";
+import { Select } from "@/components/ui/Select";
 
 type Props = {
   settings: OpsSettings;
   onSave: (next: OpsSettings) => void;
+  bare?: boolean;
 };
 
 type ToggleKey = "manualCheckIn" | "allowReentry" | "showGuestNames" | "studentIdCheck" | "soundFeedback";
@@ -25,7 +28,7 @@ const toggles: { key: ToggleKey; label: string; hint: string }[] = [
 const selectCls =
   "h-11 w-full rounded-lg border border-line bg-surface-2 px-3 text-sm text-text focus:border-gold focus:outline-none";
 
-export function EventDaySettings({ settings, onSave }: Props) {
+export function EventDaySettings({ settings, onSave, bare }: Props) {
   const [draft, setDraft] = useState(settings);
   const [saved, setSaved] = useState(false);
 
@@ -36,7 +39,7 @@ export function EventDaySettings({ settings, onSave }: Props) {
   };
 
   return (
-    <Panel className="p-5 sm:p-6">
+    <Panel bare={bare} className="p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-text">Event-day settings</h2>
@@ -57,8 +60,7 @@ export function EventDaySettings({ settings, onSave }: Props) {
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="mb-2 block text-xs font-bold text-muted">Check-in opens</span>
-          <input
-            type="time"
+          <TimePicker
             value={draft.checkInOpens}
             onChange={(e) => set({ checkInOpens: e.target.value })}
             className={selectCls}
@@ -69,7 +71,7 @@ export function EventDaySettings({ settings, onSave }: Props) {
         <div>
           <span className="mb-2 block text-xs font-bold text-muted">Late entry</span>
           <div className="flex gap-2">
-            <select
+            <Select
               aria-label="Late entry"
               value={draft.lateCutoff === "none" ? "none" : "at"}
               onChange={(e) => set({ lateCutoff: e.target.value === "none" ? "none" : "20:30" })}
@@ -77,14 +79,13 @@ export function EventDaySettings({ settings, onSave }: Props) {
             >
               <option value="none">No cut-off</option>
               <option value="at">Refuse after…</option>
-            </select>
+            </Select>
             {draft.lateCutoff !== "none" && (
-              <input
-                type="time"
+              <TimePicker
                 aria-label="Late entry cut-off time"
                 value={draft.lateCutoff}
                 onChange={(e) => set({ lateCutoff: e.target.value || "20:30" })}
-                className={`${selectCls} w-36`}
+                className={`${selectCls} w-40`}
               />
             )}
           </div>
@@ -93,7 +94,7 @@ export function EventDaySettings({ settings, onSave }: Props) {
 
         <label className="block">
           <span className="mb-2 block text-xs font-bold text-muted">Scanner link works until</span>
-          <select
+          <Select
             value={draft.scannerLinkExpiry}
             onChange={(e) => set({ scannerLinkExpiry: e.target.value as OpsSettings["scannerLinkExpiry"] })}
             className={selectCls}
@@ -101,7 +102,7 @@ export function EventDaySettings({ settings, onSave }: Props) {
             <option value="midnight">Midnight on the event day</option>
             <option value="dawn">6 AM the next morning</option>
             <option value="event_end">When the event ends</option>
-          </select>
+          </Select>
         </label>
 
         <label className="block">

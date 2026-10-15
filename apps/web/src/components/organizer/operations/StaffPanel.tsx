@@ -17,12 +17,14 @@ import {
 } from "@/lib/operations";
 import { newId } from "@/lib/organizer";
 import { Dialog, Panel } from "../ui";
+import { Select } from "@/components/ui/Select";
 
 type Props = {
   staff: StaffMember[];
   onAdd: (s: StaffMember) => void;
   onUpdate: (s: StaffMember) => void;
   onRemove: (s: StaffMember) => void;
+  bare?: boolean;
 };
 
 const statusTone: Record<StaffStatus, "success" | "warning" | "danger"> = {
@@ -34,14 +36,14 @@ const statusLabel: Record<StaffStatus, string> = { active: "Active", invited: "I
 
 const looksLikeContact = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || /^\+?[\d\s-]{8,15}$/.test(v);
 
-export function StaffPanel({ staff, onAdd, onUpdate, onRemove }: Props) {
+export function StaffPanel({ staff, onAdd, onUpdate, onRemove, bare }: Props) {
   const [editing, setEditing] = useState<StaffMember | "new" | null>(null);
   const [removing, setRemoving] = useState<StaffMember | null>(null);
 
   const active = staff.filter((s) => s.status === "active").length;
 
   return (
-    <Panel className="p-5 sm:p-6">
+    <Panel bare={bare} className="p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-text">Event staff</h2>
@@ -281,7 +283,7 @@ function StaffForm({
           <label htmlFor="staff-role" className="mb-2 block text-xs font-bold text-muted">
             Role
           </label>
-          <select
+          <Select
             id="staff-role"
             value={role}
             onChange={(e) => setRole(e.target.value as StaffRole)}
@@ -292,13 +294,13 @@ function StaffForm({
                 {roleMeta[r].label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label htmlFor="staff-gate" className="mb-2 block text-xs font-bold text-muted">
             Door
           </label>
-          <select
+          <Select
             id="staff-gate"
             value={gate}
             disabled={role === "support"}
@@ -308,7 +310,7 @@ function StaffForm({
             {GATES.map((g) => (
               <option key={g}>{g}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
       <p className="-mt-1 text-[11px] leading-relaxed text-dim">{roleMeta[role].summary}</p>

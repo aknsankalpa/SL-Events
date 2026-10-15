@@ -1,7 +1,9 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
-import { useId, useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useState, type ChangeEvent, type ComponentProps, type ReactNode } from "react";
+import { DatePicker, TimePicker } from "./Pickers";
+import { Select } from "./Select";
 
 type FieldProps = Omit<ComponentProps<"input">, "id"> & {
   label: string;
@@ -17,6 +19,23 @@ type FieldProps = Omit<ComponentProps<"input">, "id"> & {
 export function Field({ label, icon, hint, error, labelAction, trailing, className = "", ...input }: FieldProps) {
   const id = useId();
   const messageId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+  const { type, value, defaultValue, onChange, name, disabled, required, placeholder } = input;
+  // Dates and times use the app's own pickers instead of the browser's native popups.
+  const picker =
+    type === "date" || type === "time"
+      ? {
+          id,
+          name,
+          disabled,
+          required,
+          placeholder,
+          value: typeof value === "string" ? value : undefined,
+          defaultValue: typeof defaultValue === "string" ? defaultValue : undefined,
+          onChange: onChange ? (e: { target: { value: string } }) => onChange(e as unknown as ChangeEvent<HTMLInputElement>) : undefined,
+          className: "h-full w-full text-sm text-text focus:outline-none",
+          "aria-describedby": messageId,
+        }
+      : null;
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between">
@@ -31,13 +50,19 @@ export function Field({ label, icon, hint, error, labelAction, trailing, classNa
         }`}
       >
         {icon && <span className="text-dim [&>svg]:size-4">{icon}</span>}
-        <input
-          id={id}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={messageId}
-          className="h-full w-full bg-transparent text-sm text-text placeholder:text-dim focus:outline-none"
-          {...input}
-        />
+        {picker && type === "date" ? (
+          <DatePicker {...picker} />
+        ) : picker ? (
+          <TimePicker {...picker} />
+        ) : (
+          <input
+            id={id}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={messageId}
+            className="h-full w-full bg-transparent text-sm text-text placeholder:text-dim focus:outline-none"
+            {...input}
+          />
+        )}
         {trailing}
       </div>
       {(error || hint) && (
@@ -85,13 +110,17 @@ export function SelectField({
       </label>
       <div className="flex h-12 items-center gap-3 rounded-lg border border-line bg-surface px-4 focus-within:border-gold">
         {icon && <span className="text-dim [&>svg]:size-4">{icon}</span>}
-        <select
+        <Select
           id={id}
-          className="h-full w-full appearance-none bg-transparent text-sm text-text focus:outline-none"
-          {...select}
+          value={typeof select.value === "string" ? select.value : undefined}
+          defaultValue={typeof select.defaultValue === "string" ? select.defaultValue : undefined}
+          onChange={select.onChange ? (e) => select.onChange?.(e as unknown as ChangeEvent<HTMLSelectElement>) : undefined}
+          name={select.name}
+          disabled={select.disabled}
+          className="h-full w-full bg-transparent text-sm text-text focus:outline-none"
         >
           {children}
-        </select>
+        </Select>
       </div>
       {hint && <p className="mt-1.5 text-xs text-dim">{hint}</p>}
     </div>

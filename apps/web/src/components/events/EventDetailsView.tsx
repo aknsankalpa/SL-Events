@@ -25,16 +25,19 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
 
   return (
     <div className="mx-auto max-w-site px-5 pb-16 pt-8">
-      <Breadcrumbs
-        crumbs={[
-          { label: "Events", href: preview ? undefined : "/events" },
-          { label: categoryLabel, href: preview ? undefined : `/events?category=${event.category}` },
-          { label: event.title },
-        ]}
-      />
+      {/* The preview is just the advertisement, so the "Events / Category" trail (site navigation) is left out. */}
+      {!preview && (
+        <Breadcrumbs
+          crumbs={[
+            { label: "Events", href: "/events" },
+            { label: categoryLabel, href: `/events?category=${event.category}` },
+            { label: event.title },
+          ]}
+        />
+      )}
 
       <div
-        className={`relative mt-6 flex h-56 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br sm:h-72 ${coverGradients[event.category]}`}
+        className={`relative ${preview ? "" : "mt-6"} flex h-56 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br sm:h-72 ${coverGradients[event.category]}`}
       >
         {coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
@@ -141,7 +144,6 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
               {[
                 "Seats are held for 24 hours while you pay and upload proof.",
                 "Payments are usually checked within 2–6 hours.",
-                "Refunds are available until 3 days before the event.",
               ].map((t) => (
                 <li key={t} className="flex items-center gap-3 text-[13px] text-muted">
                   <CheckCircle2 size={16} aria-hidden className="shrink-0 text-amber" />

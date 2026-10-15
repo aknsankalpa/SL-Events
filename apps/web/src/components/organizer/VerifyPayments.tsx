@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Maximize2, ShieldCheck, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, CheckCircle2, Maximize2, ShieldCheck, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatKrw } from "@/lib/format";
 import { rejectReasons, verifyQueue, type QueueItem } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { OrgPageHeader, Panel } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 type Sort = "oldest" | "newest" | "amount";
 
@@ -83,18 +84,17 @@ export function VerifyPayments() {
               <h2 className="text-base font-bold text-text">Waiting</h2>
               <label className="relative">
                 <span className="sr-only">Sort the queue</span>
-                <select
+                <Select
                   value={sort}
                   onChange={(e) => setSort(e.target.value as Sort)}
-                  className="h-9 cursor-pointer appearance-none rounded-lg border border-line bg-surface-2 pl-3 pr-8 text-xs font-bold text-text focus:border-gold focus:outline-none"
+                  className="h-9 rounded-lg border border-line bg-surface-2 pl-3 pr-3 text-xs font-bold text-text focus:border-gold focus:outline-none"
                 >
                   {sorts.map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
                   ))}
-                </select>
-                <ChevronDown size={12} aria-hidden className="pointer-events-none absolute right-3 top-3 text-muted" />
+                </Select>
               </label>
             </div>
             <ul className="flex-1 overflow-y-auto">
@@ -218,18 +218,17 @@ function ReviewPane({ item, onApprove, onReject }: { item: QueueItem; onApprove:
             Reject reason
           </label>
           <div className="relative">
-            <select
+            <Select
               id="reject-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="h-11 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface-2 px-3 pr-9 text-sm text-text focus:border-gold focus:outline-none"
+              className="h-11 w-full rounded-lg border border-line bg-surface-2 px-3 text-sm text-text focus:border-gold focus:outline-none"
             >
               <option value="">Choose a reason</option>
               {rejectReasons.map((r) => (
                 <option key={r}>{r}</option>
               ))}
-            </select>
-            <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-3 top-3.5 text-muted" />
+            </Select>
           </div>
           <Button
             variant="outline"

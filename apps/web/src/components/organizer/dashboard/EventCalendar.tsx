@@ -46,7 +46,7 @@ export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
   const iso = (day: number) => `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6" aria-label="Event calendar">
+    <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5 lg:[@media(max-height:760px)]:py-3" aria-label="Event calendar">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold text-text">{label}</h2>
         <div className="flex gap-1.5">
@@ -67,9 +67,16 @@ export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-7 gap-y-1 text-center">
+      {/*
+        The seven columns are set inline so the week grid can never collapse into a single column, whatever the
+        generated stylesheet contains. The grid is capped in width so a wide card doesn't stretch it into a sparse table.
+      */}
+      <div
+        className="mx-auto mt-3 grid max-w-sm gap-y-0.5 text-center lg:[@media(max-height:760px)]:mt-2"
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
+      >
         {DOW.map((d, i) => (
-          <span key={i} aria-hidden className="pb-2 text-[10px] font-bold text-dim">
+          <span key={i} aria-hidden className="pb-1.5 text-[10px] font-bold text-dim lg:[@media(max-height:760px)]:pb-0.5">
             {d}
           </span>
         ))}
@@ -78,7 +85,7 @@ export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
           const date = iso(day);
           const hits = byDay.get(date);
           const today = date === REFERENCE_DATE;
-          const base = "mx-auto flex size-9 items-center justify-center rounded-full text-xs";
+          const base = "mx-auto flex size-8 items-center justify-center rounded-full text-xs lg:size-7 lg:[@media(max-height:760px)]:size-6";
           if (hits) {
             return (
               <Link
@@ -104,7 +111,7 @@ export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
         })}
       </div>
 
-      <p className="mt-4 flex items-center gap-2 text-[11px] text-dim">
+      <p className="mt-3 flex items-center gap-2 text-[11px] text-dim lg:hidden">
         <span aria-hidden className="size-2.5 rounded-full bg-gradient-to-b from-gold to-amber" /> Event day
         <span aria-hidden className="ml-3 size-2.5 rounded-full border border-gold/70" /> Today
       </p>

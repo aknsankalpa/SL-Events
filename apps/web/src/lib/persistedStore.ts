@@ -2,10 +2,13 @@
  * A tiny localStorage-backed external store, for React's useSyncExternalStore. It stands in for API calls until the
  * backend exists: reads fall back to `fallback` (the seed data) and the first write persists the whole value.
  *
- *   const store = createPersistedStore("key", seed);
+ * Saved values outlive code changes, so `normalize` repairs whatever was stored (fills fields added since it was
+ * saved, drops malformed rows). Without it a value saved by an older version can crash the page that reads it.
+ *
+ *   const store = createPersistedStore("key", seed, normalize);
  *   const value = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
  */
-export function createPersistedStore<T>(key: string, fallback: T) {
+export function createPersistedStore<T>(key: string, fallback: T, normalize?: (stored: unknown) => T) {
   let cache: T = fallback;
   let loaded = false;
   const listeners = new Set<() => void>();
@@ -13,7 +16,9 @@ export function createPersistedStore<T>(key: string, fallback: T) {
   function read(): T {
     try {
       const raw = window.localStorage.getItem(key);
-      return raw ? (JSON.parse(raw) as T) : fallback;
+      if (!raw) return fallback;
+      const parsed: unknown = JSON.parse(raw);
+      return normalize ? normalize(parsed) : (parsed as T);
     } catch {
       return fallback;
     }

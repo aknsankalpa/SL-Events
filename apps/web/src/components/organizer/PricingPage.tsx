@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, Copy, Info, Pencil, Plus } from "lucide-react";
+import { Check, Copy, Info, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/StatusBadge";
@@ -10,6 +10,7 @@ import { formatKrw } from "@/lib/format";
 import { pricePhases as seedPhases, promoCodes as seedCodes, type PricePhase, type PromoCode } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { Dialog, EventPicker, OrgPageHeader, Panel } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 const phaseBadge = {
   ended: { label: "Ended", tone: "neutral" as const },
@@ -153,17 +154,16 @@ export function PricingBody({ onChange }: { onChange?: () => void }) {
                   Applies to
                 </label>
                 <div className="relative">
-                  <select
+                  <Select
                     id="applies"
                     disabled={!groupOn}
                     onChange={dirty}
-                    className="h-12 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface px-4 pr-10 text-sm text-text focus:border-gold focus:outline-none"
+                    className="h-12 w-full rounded-lg border border-line bg-surface px-4 text-sm text-text focus:border-gold focus:outline-none"
                   >
                     <option>General</option>
                     <option>VIP</option>
                     <option>All ticket types</option>
-                  </select>
-                  <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-4 text-muted" />
+                  </Select>
                 </div>
               </div>
             </div>
@@ -419,14 +419,14 @@ function CodeDialog({ open, onClose, onSave }: { open: boolean; onClose: () => v
               <label htmlFor="kind" className="mb-2 block text-xs font-bold text-muted">
                 Type
               </label>
-              <select
+              <Select
                 id="kind"
                 name="kind"
                 className="h-12 w-full rounded-lg border border-line bg-surface px-3 text-sm text-text focus:border-gold focus:outline-none"
               >
                 <option value="percent">Percent off</option>
                 <option value="amount">Amount off (₩)</option>
-              </select>
+              </Select>
             </div>
             <Field label="Value" name="value" inputMode="numeric" placeholder="10" />
           </div>

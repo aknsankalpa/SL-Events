@@ -9,10 +9,13 @@ async function Preview({ params }: { params: Promise<{ id: string }> }) {
   return <DraftPreview id={id} />;
 }
 
+/** Just the event advertisement, with no site header or footer. It lives outside the customer layout on purpose. */
 export default function EventPreviewPage({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-site px-5 py-16 text-sm text-muted">Loading preview…</div>}>
-      <Preview params={params} />
-    </Suspense>
+    <main className="min-h-screen bg-page">
+      <Suspense fallback={<div className="mx-auto max-w-site px-5 py-16 text-sm text-muted">Loading preview…</div>}>
+        <Preview params={params} />
+      </Suspense>
+    </main>
   );
 }

@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock,
   Globe,
   Image as ImageIcon,
@@ -26,6 +25,7 @@ import { isEmptyHtml } from "@/lib/richText";
 import { Panel } from "../ui";
 import { useOrganizerProfile } from "../useOrganizerProfile";
 import { capacityOf, useEventDraft } from "./EventDraft";
+import { Select } from "@/components/ui/Select";
 
 export function DetailsStep() {
   const { draft, patch } = useEventDraft();
@@ -74,17 +74,16 @@ export function DetailsStep() {
                   Category
                 </label>
                 <div className="relative">
-                  <select
+                  <Select
                     id="category"
                     value={draft.category}
                     onChange={(e) => patch({ category: e.target.value })}
-                    className="h-12 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface px-4 pr-10 text-sm text-text focus:border-gold focus:outline-none"
+                    className="h-12 w-full rounded-lg border border-line bg-surface px-4 text-sm text-text focus:border-gold focus:outline-none"
                   >
                     {eventCategories.map((c) => (
                       <option key={c}>{c}</option>
                     ))}
-                  </select>
-                  <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-4 text-muted" />
+                  </Select>
                 </div>
               </div>
               <Field label="Short tags" value={draft.tags} onChange={(e) => patch({ tags: e.target.value })} placeholder="Dance · Drumming · Family" />

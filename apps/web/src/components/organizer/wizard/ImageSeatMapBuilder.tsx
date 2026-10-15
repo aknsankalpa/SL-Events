@@ -9,6 +9,7 @@ import {
   Hash,
   ImagePlus,
   Loader2,
+  Minus,
   MousePointer2,
   Plus,
   Redo2,
@@ -35,8 +36,12 @@ import { MIN_SEATS } from "@/lib/seatDetect";
 import { defaultSections, detectLayoutSeats, emptyLayout, newSeatUid, readPlanFile, renumber, sectionPalette } from "@/lib/seatLayout";
 import { Dialog, Panel } from "../ui";
 import { useEventDraft } from "./EventDraft";
+import { Select } from "@/components/ui/Select";
 
 type Tool = "select" | "area" | "add";
+/** How a click or a dragged box changes the selection: start a new one, add to it, or take seats out of it. */
+type SelMode = "replace" | "add" | "remove";
+const SECTION_NAMES = ["Front row", "Middle", "Back row", "Balcony", "VIP"];
 type Snapshot = { layout: SeatLayout; sections: SeatSection[] };
 
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -177,12 +182,16 @@ export function ImageSeatMapBuilder() {
   const [note, setNote] = useState<string>();
   const [confirm, setConfirm] = useState<"redetect" | "grid" | null>(null);
   const [rect, setRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [selMode, setSelMode] = useState<SelMode>("replace");
+  const [secName, setSecName] = useState("");
+  const [secColor, setSecColor] = useState<string>(sectionPalette[1]!);
+  const [secPrice, setSecPrice] = useState(30000);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasBox = useRef<HTMLDivElement>(null);
   const fitted = useRef(false);
   // The drag lives in a ref (not state) so a fast press-move-release is handled even before React re-renders.
-  const drag = useRef<{ x: number; y: number; ex: number; ey: number; additive: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; ex: number; ey: number; mode: SelMode } | null>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
 
   // Open the plan fitted to the canvas so the whole venue is visible; the zoom buttons take over from there.
@@ -239,6 +248,36 @@ export function ImageSeatMapBuilder() {
     return { x: ((e.clientX - box.left) * layout.width) / box.width, y: ((e.clientY - box.top) * layout.height) / box.height };
   }
 
+  /** Shift adds to the selection and Alt removes from it; otherwise the New / Add / Remove buttons decide. */
+  const modeFor = (e: { shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean }): SelMode =>
+    e.altKey ? "remove" : e.shiftKey || e.metaKey || e.ctrlKey ? "add" : selMode;
+
+  function applySelection(uids: string[], mode: SelMode) {
+    setSelected((cur) => {
+      if (mode === "replace") return new Set(uids);
+      const next = new Set(cur);
+      for (const u of uids) {
+        if (mode === "add") next.add(u);
+        else next.delete(u);
+      }
+      return next;
+    });
+  }
+
+  /** The dot under a point of the plan, if any. The Area tool uses it to turn a plain click into a toggle. */
+  function seatAt(p: { x: number; y: number }) {
+    let best: LayoutSeat | null = null;
+    let bestD = Infinity;
+    for (const seat of layout.seats) {
+      const d = (seat.x - p.x) ** 2 + (seat.y - p.y) ** 2;
+      if (d < bestD && d <= (seat.r * 1.4) ** 2) {
+        best = seat;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
   function onCanvasDown(e: React.PointerEvent<SVGSVGElement>) {
     const p = toImage(e);
     if (tool === "add") {
@@ -259,17 +298,18 @@ export function ImageSeatMapBuilder() {
         num: 0,
       };
       setSeats([...layout.seats, seat]);
-      setSelected(new Set([seat.uid]));
+      // The new dot joins the current selection, so a group can be completed and then named in one go.
+      setSelected((cur) => new Set([...cur, seat.uid]));
       return;
     }
     if (tool === "area") {
       svgRef.current!.setPointerCapture(e.pointerId);
-      drag.current = { x: p.x, y: p.y, ex: p.x, ey: p.y, additive: e.shiftKey || e.metaKey || e.ctrlKey };
+      drag.current = { x: p.x, y: p.y, ex: p.x, ey: p.y, mode: modeFor(e) };
       setRect({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
       return;
     }
-    // select tool on empty space clears the selection
-    if (!(e.shiftKey || e.metaKey || e.ctrlKey)) setSelected(new Set());
+    // select tool on empty space clears the selection (unless the click is meant to add or remove)
+    if (modeFor(e) === "replace") setSelected(new Set());
   }
 
   function onCanvasMove(e: React.PointerEvent<SVGSVGElement>) {
@@ -287,24 +327,29 @@ export function ImageSeatMapBuilder() {
     if (!d) return;
     setRect(null);
     const end = toImage(e);
+
+    // A press and release without moving is a click: toggle the dot under the pointer.
+    if (Math.hypot(end.x - d.x, end.y - d.y) * zoom < 4) {
+      const hit = seatAt(end);
+      if (hit) applySelection([hit.uid], d.mode === "replace" ? (selected.has(hit.uid) ? "remove" : "add") : d.mode);
+      else if (d.mode === "replace") setSelected(new Set());
+      return;
+    }
+
     const [x1, x2] = [Math.min(d.x, end.x), Math.max(d.x, end.x)];
     const [y1, y2] = [Math.min(d.y, end.y), Math.max(d.y, end.y)];
     const hit = layout.seats.filter((s) => s.x >= x1 && s.x <= x2 && s.y >= y1 && s.y <= y2).map((s) => s.uid);
-    const additive = d.additive;
-    setSelected((cur) => new Set(additive ? [...cur, ...hit] : hit));
+    applySelection(hit, d.mode);
   }
 
   function onSeatDown(e: React.PointerEvent, uid: string) {
     if (tool !== "select") return;
     e.stopPropagation();
-    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
-    setSelected((cur) => {
-      if (!additive) return new Set([uid]);
-      const next = new Set(cur);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
-      return next;
-    });
+    const mode = modeFor(e);
+    if (mode === "replace") setSelected(new Set([uid]));
+    // Shift-click keeps working as a toggle, as before.
+    else if (mode === "add" && selected.has(uid) && (e.shiftKey || e.metaKey || e.ctrlKey)) applySelection([uid], "remove");
+    else applySelection([uid], mode);
   }
 
   function selectRow(row: string) {
@@ -364,6 +409,30 @@ export function ImageSeatMapBuilder() {
   }
 
   const assignSelected = (id: string) => change((s) => ({ ...s, section: id }));
+
+  /** Turns the selected seats into a new, named, coloured and priced section in one step. */
+  function createSectionFromSelection() {
+    const name = secName.trim();
+    if (!name || !selected.size) return;
+    const id = `sec-${Date.now().toString(36)}`;
+    commit({
+      sections: [
+        ...sections,
+        { id, name, color: secColor, price: secPrice, rows: "—", seatsPerRow: 0, aisleAfter: 0, numbering: "1 → 16", seatType: "Single" },
+      ],
+      layout: { ...layout, seats: layout.seats.map((s) => (selected.has(s.uid) ? { ...s, section: id } : s)) },
+    });
+    setNote(`Created "${name}" with ${selected.size} seat${selected.size === 1 ? "" : "s"}.`);
+    setSelected(new Set());
+    setSecName("");
+    // Offer the next colour so consecutive sections are easy to tell apart.
+    const used = new Set([...sections.map((x) => x.color), secColor]);
+    setSecColor(sectionPalette.find((c) => !used.has(c)) ?? sectionPalette[0]!);
+  }
+
+  const emptySections = sections.filter((sec) => !layout.seats.some((seat) => seat.section === sec.id));
+  const canRemoveEmpty = emptySections.length > 0 && emptySections.length < sections.length;
+  const removeEmptySections = () => commit({ sections: sections.filter((sec) => !emptySections.includes(sec)) });
 
   /* ---- detection ---- */
 
@@ -481,6 +550,42 @@ export function ImageSeatMapBuilder() {
               <Tool label="Add a seat" active={tool === "add"} onClick={() => setTool("add")}>
                 <Plus size={16} />
               </Tool>
+              {tool !== "add" && (
+                <div role="group" aria-label="What selecting does" className="ml-1 inline-flex gap-0.5 rounded-lg border border-line p-0.5">
+                  {(
+                    [
+                      ["replace", "New"],
+                      ["add", "Add"],
+                      ["remove", "Remove"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={selMode === value}
+                      title={
+                        value === "replace"
+                          ? "Start a new selection"
+                          : value === "add"
+                            ? "Add dots to the selection (or hold Shift)"
+                            : "Take dots out of the selection (or hold Alt)"
+                      }
+                      onClick={() => setSelMode(value)}
+                      className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-bold transition-colors focus-visible:focus-ring ${
+                        selMode === value
+                          ? value === "remove"
+                            ? "bg-danger/20 text-danger"
+                            : "bg-gold/15 text-gold"
+                          : "text-muted hover:text-text"
+                      }`}
+                    >
+                      {value === "add" && <Plus size={12} aria-hidden />}
+                      {value === "remove" && <Minus size={12} aria-hidden />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span aria-hidden className="mx-1 h-6 w-px bg-line" />
               <Tool label="Undo" disabled={history.past.length === 0} onClick={undo}>
                 <Undo2 size={16} />
@@ -507,11 +612,24 @@ export function ImageSeatMapBuilder() {
             </div>
           </div>
 
-          <p className="border-b border-line bg-surface-2 px-4 py-2 text-[11px] text-dim">
-            {tool === "select" && "Click a seat to select it. Shift-click adds more. Click a row letter to select the whole row."}
-            {tool === "area" && "Drag a box around seats to select them. Hold Shift to add to the selection."}
-            {tool === "add" && "Click on the plan to add a seat the tool missed. It joins the nearest seat's section."}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-[11px] text-dim">
+            <p>
+              {tool === "select" &&
+                "Click a dot to select it. Use Add or Remove (or Shift / Alt) to fix the group dot by dot. Click a row letter to select a whole row."}
+              {tool === "area" &&
+                "Drag a box around dots to select them, then use Add or Remove to correct it. A single click toggles one dot. Shift adds, Alt removes."}
+              {tool === "add" &&
+                "Click the plan to place a dot the detector missed. New dots join your selection so you can put them in a section."}
+            </p>
+            {selectedCount > 0 && (
+              <p className="flex items-center gap-2 font-bold text-gold" aria-live="polite">
+                {selectedCount} selected
+                <button type="button" onClick={() => setSelected(new Set())} className="font-normal text-muted underline hover:text-text">
+                  Clear
+                </button>
+              </p>
+            )}
+          </div>
 
           <div ref={canvasBox} className="max-h-[70vh] overflow-auto bg-black/40 p-3 sm:p-4" tabIndex={0} aria-label="Seating plan canvas">
             <svg
@@ -631,23 +749,98 @@ export function ImageSeatMapBuilder() {
             <p className="mt-1 text-[11px] text-dim" aria-live="polite">
               {selectedCount === 0 ? "No seats selected" : `${selectedCount} seat${selectedCount === 1 ? "" : "s"} selected`}
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Action disabled={!selectedCount} onClick={() => change((s) => ({ ...s, blocked: !allBlocked }))}>
-                <Ban size={14} aria-hidden /> {allBlocked ? "Unblock" : "Block"}
-              </Action>
-              <Action disabled={!selectedCount} onClick={() => change((s) => ({ ...s, accessible: !allAccessible }))}>
-                <Accessibility size={14} aria-hidden /> {allAccessible ? "Not accessible" : "Accessible"}
-              </Action>
-              <Action disabled={!selectedCount} onClick={deleteSelected} danger>
-                <Trash2 size={14} aria-hidden /> Delete
-              </Action>
-              <Action disabled={!selectedCount} onClick={() => setSelected(new Set())}>
-                Clear
-              </Action>
-            </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-dim">
-              Blocked seats stay on the chart but are never sold, for example a camera position or a pillar.
-            </p>
+
+            {selectedCount === 0 ? (
+              <p className="mt-4 rounded-lg border border-dashed border-line p-4 text-xs leading-relaxed text-muted">
+                Drag a box around seats on the plan (Area tool), or click dots. Then name, colour and price them as a section here.
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Action disabled={!selectedCount} onClick={() => change((s) => ({ ...s, blocked: !allBlocked }))}>
+                    <Ban size={14} aria-hidden /> {allBlocked ? "Unblock" : "Block"}
+                  </Action>
+                  <Action disabled={!selectedCount} onClick={() => change((s) => ({ ...s, accessible: !allAccessible }))}>
+                    <Accessibility size={14} aria-hidden /> {allAccessible ? "Not accessible" : "Accessible"}
+                  </Action>
+                  <Action disabled={!selectedCount} onClick={deleteSelected} danger>
+                    <Trash2 size={14} aria-hidden /> Delete dots
+                  </Action>
+                  <Action disabled={!selectedCount} onClick={() => setSelected(new Set())}>
+                    Clear
+                  </Action>
+                </div>
+                <p className="mt-3 text-[11px] leading-relaxed text-dim">
+                  Wrong dots (text, a stage edge)? Switch to <strong className="text-muted">Remove</strong> and click them, or{" "}
+                  <strong className="text-muted">Delete dots</strong> to take them off the chart. Missing a dot? Use the{" "}
+                  <strong className="text-muted">+</strong> tool.
+                </p>
+
+                <form
+                  className="mt-5 space-y-4 border-t border-line pt-5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    createSectionFromSelection();
+                  }}
+                >
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-dim">
+                    Make these {selectedCount} seat{selectedCount === 1 ? "" : "s"} a section
+                  </h3>
+
+                  <div>
+                    <label htmlFor="new-section-name" className="mb-1.5 block text-xs font-bold text-muted">
+                      Section name
+                    </label>
+                    <input
+                      id="new-section-name"
+                      value={secName}
+                      onChange={(e) => setSecName(e.target.value)}
+                      placeholder="Front row"
+                      className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text placeholder:text-dim focus:border-gold focus:outline-none"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {SECTION_NAMES.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setSecName(n)}
+                          className={`h-7 rounded-full border px-2.5 text-[11px] font-bold transition-colors focus-visible:focus-ring ${
+                            secName === n ? "border-gold bg-gold/15 text-gold" : "border-line text-muted hover:border-gold/50 hover:text-text"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="mb-1.5 block text-xs font-bold text-muted">Colour</span>
+                    <ColorSwatches value={secColor} onChange={setSecColor} label="New section colour" />
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-muted">Price per seat</span>
+                    <span className="flex h-10 items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 text-xs text-muted focus-within:border-gold">
+                      ₩
+                      <input
+                        inputMode="numeric"
+                        value={secPrice}
+                        onChange={(e) => setSecPrice(Number(e.target.value.replace(/\D/g, "")) || 0)}
+                        className="w-full bg-transparent text-[13px] font-bold text-text focus:outline-none"
+                      />
+                    </span>
+                  </label>
+
+                  <Button type="submit" className="w-full" disabled={!secName.trim()}>
+                    Create section
+                  </Button>
+                  <p className="text-[11px] leading-relaxed text-dim">
+                    Or put them in a section you already made with <strong className="text-muted">Put selected seats here</strong> below.
+                  </p>
+                </form>
+              </>
+            )}
           </Panel>
 
           <Panel className="p-5">
@@ -657,21 +850,21 @@ export function ImageSeatMapBuilder() {
                 <Plus size={14} aria-hidden /> Add
               </Button>
             </div>
+            {canRemoveEmpty && (
+              <p className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-[11px] text-muted">
+                {emptySections.length} section{emptySections.length === 1 ? " has" : "s have"} no seats.
+                <button type="button" onClick={removeEmptySections} className="font-bold text-amber hover:text-gold">
+                  Remove empty
+                </button>
+              </p>
+            )}
             <ul className="mt-4 space-y-3">
               {sections.map((s) => {
                 const st = seatMapSectionStats(map, s);
                 return (
                   <li key={s.id} className="rounded-xl border border-line bg-surface-2 p-3">
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        aria-label={`Change colour of ${s.name}`}
-                        onClick={() =>
-                          updateSection(s.id, { color: sectionPalette[(sectionPalette.indexOf(s.color) + 1) % sectionPalette.length]! })
-                        }
-                        className="size-6 shrink-0 rounded-full border border-black/40 focus-visible:focus-ring"
-                        style={{ backgroundColor: s.color }}
-                      />
+                      <span aria-hidden className="size-6 shrink-0 rounded-full border border-black/40" style={{ backgroundColor: s.color }} />
                       <input
                         aria-label="Section name"
                         value={s.name}
@@ -688,7 +881,10 @@ export function ImageSeatMapBuilder() {
                         <Trash2 size={14} />
                       </button>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2.5">
+                      <ColorSwatches value={s.color} onChange={(c) => updateSection(s.id, { color: c })} label={`Colour of ${s.name}`} />
+                    </div>
+                    <div className="mt-2.5 flex items-center gap-2">
                       <label className="flex h-9 flex-1 items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-xs text-muted focus-within:border-gold">
                         <span className="sr-only">Price</span>₩
                         <input
@@ -723,7 +919,7 @@ export function ImageSeatMapBuilder() {
             <div className="mt-4 space-y-4">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-bold text-muted">Seats are</span>
-                <select
+                <Select
                   value={settings.polarity}
                   onChange={(e) => updateDetection({ polarity: e.target.value as DetectionSettings["polarity"] })}
                   className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text focus:border-gold focus:outline-none"
@@ -731,7 +927,7 @@ export function ImageSeatMapBuilder() {
                   <option value="auto">Found automatically</option>
                   <option value="dark">Darker than the background</option>
                   <option value="light">Lighter than the background</option>
-                </select>
+                </Select>
               </label>
               <Slider
                 label="Sensitivity"
@@ -789,25 +985,25 @@ export function ImageSeatMapBuilder() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-bold text-muted">Row A is at the</span>
-                  <select
+                  <Select
                     value={settings.rowOrder}
                     onChange={(e) => updateNumbering({ rowOrder: e.target.value as DetectionSettings["rowOrder"] })}
                     className="h-10 w-full rounded-lg border border-line bg-surface-2 px-2 text-[13px] text-text focus:border-gold focus:outline-none"
                   >
                     <option value="top-down">Top</option>
                     <option value="bottom-up">Bottom</option>
-                  </select>
+                  </Select>
                 </label>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-bold text-muted">Seat 1 is on the</span>
-                  <select
+                  <Select
                     value={settings.seatOrder}
                     onChange={(e) => updateNumbering({ seatOrder: e.target.value as DetectionSettings["seatOrder"] })}
                     className="h-10 w-full rounded-lg border border-line bg-surface-2 px-2 text-[13px] text-text focus:border-gold focus:outline-none"
                   >
                     <option value="left-right">Left</option>
                     <option value="right-left">Right</option>
-                  </select>
+                  </Select>
                 </label>
               </div>
             </div>
@@ -969,6 +1165,41 @@ function Slider({
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-2 w-full cursor-pointer accent-[#e8a83a]"
       />
+    </div>
+  );
+}
+
+/** The palette plus a free colour choice. Used for both the new-section form and each existing section. */
+function ColorSwatches({ value, onChange, label }: { value: string; onChange: (color: string) => void; label: string }) {
+  const custom = !sectionPalette.includes(value);
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
+      {sectionPalette.map((c) => (
+        <button
+          key={c}
+          type="button"
+          aria-label={`Use colour ${c}`}
+          aria-pressed={value === c}
+          onClick={() => onChange(c)}
+          className={`size-6 rounded-full border-2 transition-transform hover:scale-110 focus-visible:focus-ring ${
+            value === c ? "border-white" : "border-black/40"
+          }`}
+          style={{ backgroundColor: c }}
+        />
+      ))}
+      <label
+        className={`relative size-6 cursor-pointer overflow-hidden rounded-full border-2 ${custom ? "border-white" : "border-black/40"}`}
+        style={{ background: "conic-gradient(#f7cb60, #e0281f, #c084fc, #60a5fa, #4ade80, #f7cb60)" }}
+        title="Pick any colour"
+      >
+        <span className="sr-only">Pick any colour</span>
+        <input
+          type="color"
+          value={/^#[0-9a-f]{6}$/i.test(value) ? value : "#f7cb60"}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 size-full cursor-pointer opacity-0"
+        />
+      </label>
     </div>
   );
 }

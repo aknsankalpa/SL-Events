@@ -1,4 +1,4 @@
-import type { OrganizerEvent } from "./organizer";
+import { normalizeCreatedEvent, type OrganizerEvent } from "./organizer";
 
 /**
  * Events the organizer creates in the wizard, kept in localStorage so drafts survive a reload until the API
@@ -15,7 +15,8 @@ function read(): OrganizerEvent[] {
   try {
     const raw = window.localStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as OrganizerEvent[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeCreatedEvent).filter((e): e is OrganizerEvent => e !== null);
   } catch {
     return [];
   }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, SelectField } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/StatusBadge";
-import { banks, cities, currentUser } from "@/lib/data";
+import { cities, currentUser } from "@/lib/data";
 import { historyStats } from "@/lib/bookings";
 
 const languages = ["English", "සිංහල (Sinhala)", "தமிழ் (Tamil)", "한국어 (Korean)"];
@@ -122,21 +122,6 @@ export function ProfileForm() {
           </div>
         </Card>
 
-        <Card className="p-6">
-          <h2 className="text-lg font-bold text-text">Refund account</h2>
-          <p className="mb-5 mt-1 text-xs text-dim">If a booking is refunded, we send the money here.</p>
-          <div className="grid gap-5 sm:grid-cols-3">
-            <SelectField label="Bank" name="refundBank" defaultValue={currentUser.refundAccount.bank}>
-              {banks.map((b) => (
-                <option key={b} className="bg-surface">
-                  {b}
-                </option>
-              ))}
-            </SelectField>
-            <Field label="Account number" name="refundNumber" defaultValue={currentUser.refundAccount.number} inputMode="numeric" />
-            <Field label="Account holder" name="refundHolder" defaultValue={currentUser.refundAccount.holder} />
-          </div>
-        </Card>
       </form>
 
       <Card className="p-6">
@@ -165,7 +150,7 @@ export function ProfileForm() {
         <div>
           <p className="text-[13px] font-bold text-danger">Delete account</p>
           <p className="mt-1 max-w-md text-[11px] leading-relaxed text-dim">
-            Your tickets and booking history will be removed. Refund records are kept for 5 years as the law requires.
+            Your tickets and booking history will be removed. Payment records are kept for 5 years as the law requires.
           </p>
         </div>
         <Button

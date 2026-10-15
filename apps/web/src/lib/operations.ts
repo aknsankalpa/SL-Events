@@ -80,7 +80,6 @@ export const defaultSettings: OpsSettings = {
 /** Rules SL Events controls for everyone. Shown so organizers know why they can't change them. */
 export const lockedSettings = [
   { label: "Ticket QR codes", reason: "Each QR is single-use and checked on SL Events servers, so it can't be switched off." },
-  { label: "Refunds on the day", reason: "Refunds follow the published policy: available until 3 days before the event." },
   { label: "Ticket transfers", reason: "Names on tickets can only be changed by SL Events support before the event." },
   { label: "Payment confirmation", reason: "Only verified bank transfers produce tickets. Staff cannot approve payments." },
 ];
@@ -96,7 +95,6 @@ export type EventOps = {
   staff: StaffMember[];
   settings: OpsSettings;
   activity: ActivityItem[];
-  paused: boolean;
 };
 
 const musicNightStaff: StaffMember[] = [
@@ -117,9 +115,9 @@ const musicNightActivity: ActivityItem[] = [
 
 export function seedOps(eventId: string): EventOps {
   if (eventId === "music-night") {
-    return { staff: musicNightStaff, settings: defaultSettings, activity: musicNightActivity, paused: false };
+    return { staff: musicNightStaff, settings: defaultSettings, activity: musicNightActivity };
   }
-  return { staff: [], settings: defaultSettings, activity: [], paused: false };
+  return { staff: [], settings: defaultSettings, activity: [] };
 }
 
 /* ---------- Entry statistics ---------- */

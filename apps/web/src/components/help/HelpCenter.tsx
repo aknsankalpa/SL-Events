@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, FileText, Landmark, Mail, MessageCircle, Minus, Paperclip, Phone, Plus, QrCode, Search, User, type LucideIcon } from "lucide-react";
+import { Clock, Landmark, Mail, MessageCircle, Minus, Paperclip, Phone, Plus, QrCode, Search, User, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, SelectField } from "@/components/ui/Field";
@@ -10,7 +10,6 @@ import { contactChannels, faqTotal, faqs, helpCategories } from "@/lib/content";
 const categoryIcons: Record<(typeof helpCategories)[number]["icon"], LucideIcon> = {
   bank: Landmark,
   qr: QrCode,
-  receipt: FileText,
   user: User,
 };
 
@@ -21,7 +20,7 @@ const contactIcons: Record<(typeof contactChannels)[number]["icon"], LucideIcon>
   clock: Clock,
 };
 
-const topics = ["Booking & payment", "Tickets & QR codes", "Refunds & cancellations", "Account & login", "Something else"];
+const topics = ["Booking & payment", "Tickets & QR codes", "Account & login", "Something else"];
 
 export function HelpCenter() {
   const [query, setQuery] = useState("");

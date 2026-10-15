@@ -5,7 +5,7 @@ export type BookingStatus =
   | "under_review"
   | "awaiting_payment"
   | "proof_rejected"
-  | "refunded"
+  | "cancelled"
   | "attended";
 
 export type BookingLine = { ticketName: string; qty: number; unitPrice: number };
@@ -36,7 +36,7 @@ export const statusMeta: Record<BookingStatus, { label: string; tone: "success" 
   under_review: { label: "Under review", tone: "warning" },
   awaiting_payment: { label: "Awaiting payment", tone: "neutral" },
   proof_rejected: { label: "Proof rejected", tone: "danger" },
-  refunded: { label: "Refunded", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
   attended: { label: "Attended", tone: "success" },
 };
 
@@ -102,7 +102,7 @@ export const bookings: Booking[] = [
     eventSlug: "sinhala-movie-screening",
     eventTitle: "Sinhala Movie Screening",
     eventDate: "26 Sep 2026",
-    status: "refunded",
+    status: "cancelled",
     lines: [{ ticketName: "Regular", qty: 1, unitPrice: 12000 }],
     total: 12000,
     attendees: ["Kasun Perera"],

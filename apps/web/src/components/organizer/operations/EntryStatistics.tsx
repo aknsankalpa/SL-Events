@@ -7,7 +7,7 @@ const reasonLabels = {
   not_found: "Code not recognised",
 } as const;
 
-export function EntryStatistics({ stats }: { stats: EntryStats }) {
+export function EntryStatistics({ stats, bare }: { stats: EntryStats; bare?: boolean }) {
   const slots = stats.timeline;
   const max = Math.max(1, ...slots.map((s) => s.value));
   const peak = slots.reduce<(typeof slots)[number] | null>((best, s) => (!best || s.value > best.value ? s : best), null);
@@ -18,7 +18,7 @@ export function EntryStatistics({ stats }: { stats: EntryStats }) {
   const busiest = stats.byGate.reduce<(typeof stats.byGate)[number] | null>((b, g) => (!b || g.in > b.in ? g : b), null);
 
   return (
-    <Panel className="p-5 sm:p-6">
+    <Panel bare={bare} className="p-5 sm:p-6">
       <h2 className="text-base font-bold text-text">Entry statistics</h2>
       <p className="mt-1 text-[11px] text-dim">When and where guests came in</p>
 
@@ -28,7 +28,7 @@ export function EntryStatistics({ stats }: { stats: EntryStats }) {
         </p>
       ) : (
         <>
-          <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <dl className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4">
             <Fact label="Busiest slot" value={peak ? `${peak.label} PM` : "—"} sub={peak ? `${peak.value} guests` : undefined} />
             <Fact label="Average pace" value={perMinute.toFixed(1)} sub="guests per minute" />
             <Fact

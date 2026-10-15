@@ -11,7 +11,7 @@ import { formatPrice } from "@/lib/format";
 const tabs = [
   { id: "upcoming", label: "Upcoming", match: (b: Booking) => ["confirmed", "under_review", "awaiting_payment", "proof_rejected"].includes(b.status) },
   { id: "past", label: "Past", match: (b: Booking) => b.status === "attended" },
-  { id: "cancelled", label: "Cancelled", match: (b: Booking) => b.status === "refunded" },
+  { id: "cancelled", label: "Cancelled", match: (b: Booking) => b.status === "cancelled" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];

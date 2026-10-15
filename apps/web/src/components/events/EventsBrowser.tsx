@@ -2,9 +2,10 @@
 
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, MapPin, Search } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, MapPin, Search } from "lucide-react";
 import { categories, citiesWithEvents, events, fromPrice, type CategoryId } from "@/lib/data";
 import { EventCard } from "./EventCard";
+import { Select } from "@/components/ui/Select";
 
 const PAGE_SIZE = 6;
 
@@ -200,18 +201,17 @@ export function EventsBrowser() {
           <label className="flex items-center gap-3 text-xs text-dim">
             Sort by
             <span className="relative">
-              <select
+              <Select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
-                className="h-10 appearance-none rounded-lg border border-line bg-surface py-0 pl-3 pr-9 text-[13px] font-bold text-text focus:border-gold focus:outline-none"
+                className="h-10 rounded-lg border border-line bg-surface py-0 pl-3 pr-3 text-[13px] font-bold text-text focus:border-gold focus:outline-none"
               >
                 {sortOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
-              </select>
-              <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-3 top-3 text-muted" />
+              </Select>
             </span>
           </label>
         </div>
@@ -296,14 +296,13 @@ function SelectBox({
       <span className="mb-3 block text-[11px] font-bold uppercase tracking-wider text-muted">{label}</span>
       <span className="relative flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 focus-within:border-gold">
         <span className="text-muted">{icon}</span>
-        <select
+        <Select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-10 w-full appearance-none bg-transparent pr-6 text-[13px] text-text focus:outline-none"
+          className="h-10 w-full bg-transparent pr-3 text-[13px] text-text focus:outline-none"
         >
           {children}
-        </select>
-        <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-3 text-muted" />
+        </Select>
       </span>
     </label>
   );

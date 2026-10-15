@@ -26,7 +26,10 @@ export function draftToEventItem(draft: EventDraft, id: string): EventItem {
 
   const ticketTypes: TicketType[] =
     draft.sellMode === "seats"
-      ? draft.seatMap.sections.map((s) => ({
+      ? draft.seatMap.sections
+          // On a chart built from a picture a section can end up with no seats; buyers shouldn't see it.
+          .filter((s) => !draft.seatMap.layout || seatMapSectionStats(draft.seatMap, s).free > 0)
+          .map((s) => ({
           id: s.id,
           name: s.name,
           price: s.price,
@@ -69,12 +72,14 @@ export function draftToEventItem(draft: EventDraft, id: string): EventItem {
             r: s.r,
             color: s.blocked ? "#3a3631" : (draft.seatMap.sections.find((sec) => sec.id === s.section)?.color ?? "#ece7dc"),
           })),
-        legend: draft.seatMap.sections.map((sec) => ({
-          name: sec.name,
-          color: sec.color,
-          price: sec.price,
-          seats: seatMapSectionStats(draft.seatMap, sec).free,
-        })),
+        legend: draft.seatMap.sections
+          .map((sec) => ({
+            name: sec.name,
+            color: sec.color,
+            price: sec.price,
+            seats: seatMapSectionStats(draft.seatMap, sec).free,
+          }))
+          .filter((l) => l.seats > 0),
       }
     : undefined;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BadgeCheck, Camera, Check, ChevronDown, Globe, KeyRound, Landmark, Mail, MapPin, Phone, Smartphone, User } from "lucide-react";
+import { BadgeCheck, Camera, Check, Globe, KeyRound, Landmark, Mail, MapPin, Phone, Smartphone, User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Toggle } from "@/components/ui/Toggle";
@@ -11,11 +11,11 @@ import { maskAccount, profileInitials, type OrganizerNotificationKey, type Organ
 import { OrgPageHeader, Panel } from "./ui";
 import { useHydrated } from "./useHydrated";
 import { useOrganizerProfile } from "./useOrganizerProfile";
+import { Select } from "@/components/ui/Select";
 
 const notificationRows: { key: OrganizerNotificationKey; label: string; hint: string }[] = [
   { key: "newBooking", label: "New bookings", hint: "When someone books tickets for one of your events." },
   { key: "paymentProof", label: "Payment proof uploaded", hint: "So you can check the transfer and approve it quickly." },
-  { key: "refundRequest", label: "Refund and cancellation requests", hint: "When a buyer asks to cancel or get money back." },
   { key: "lowStock", label: "Tickets running low", hint: "When a ticket type is nearly sold out." },
   { key: "dailySummary", label: "Daily sales summary", hint: "One email each morning while an event is on sale." },
   { key: "platformNews", label: "News from SL Events", hint: "Product updates and organizer tips. Infrequent." },
@@ -175,17 +175,16 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                 Language
               </label>
               <div className="relative">
-                <select
+                <Select
                   id="org-language"
                   value={form.language}
                   onChange={(e) => set({ language: e.target.value })}
-                  className="h-12 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface px-4 pr-10 text-sm text-text focus:border-gold focus:outline-none"
+                  className="h-12 w-full rounded-lg border border-line bg-surface px-4 text-sm text-text focus:border-gold focus:outline-none"
                 >
                   {languages.map((l) => (
                     <option key={l}>{l}</option>
                   ))}
-                </select>
-                <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-4 text-muted" />
+                </Select>
               </div>
             </div>
           </div>
@@ -222,17 +221,16 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                 </label>
                 <div className="relative flex items-center">
                   <MapPin size={16} aria-hidden className="pointer-events-none absolute left-4 text-dim" />
-                  <select
+                  <Select
                     id="org-city"
                     value={form.city}
                     onChange={(e) => set({ city: e.target.value })}
-                    className="h-12 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface pl-11 pr-10 text-sm text-text focus:border-gold focus:outline-none"
+                    className="h-12 w-full rounded-lg border border-line bg-surface pl-11 pr-3 text-sm text-text focus:border-gold focus:outline-none"
                   >
                     {cities.map((c) => (
                       <option key={c}>{c}</option>
                     ))}
-                  </select>
-                  <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 text-muted" />
+                  </Select>
                 </div>
               </div>
             </div>
@@ -259,7 +257,7 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                   <label htmlFor="payout-bank" className="mb-2 block text-xs font-bold text-muted">
                     Bank
                   </label>
-                  <select
+                  <Select
                     id="payout-bank"
                     value={form.payout.bank}
                     onChange={(e) => set({ payout: { ...form.payout, bank: e.target.value } })}
@@ -268,7 +266,7 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                     {banks.map((b) => (
                       <option key={b}>{b}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <Field label="Account number" inputMode="numeric" value={form.payout.number} onChange={(e) => set({ payout: { ...form.payout, number: e.target.value } })} />
                 <Field label="Name on the account" value={form.payout.holder} onChange={(e) => set({ payout: { ...form.payout, holder: e.target.value.toUpperCase() } })} />

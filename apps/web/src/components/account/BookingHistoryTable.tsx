@@ -13,7 +13,7 @@ const filters = [
   { id: "confirmed", label: "Confirmed", match: (b: Booking) => b.status === "confirmed" },
   { id: "progress", label: "In progress", match: (b: Booking) => ["under_review", "awaiting_payment", "proof_rejected"].includes(b.status) },
   { id: "past", label: "Past", match: (b: Booking) => b.status === "attended" },
-  { id: "cancelled", label: "Cancelled & refunded", match: (b: Booking) => b.status === "refunded" },
+  { id: "cancelled", label: "Cancelled", match: (b: Booking) => b.status === "cancelled" },
 ] as const;
 
 type FilterId = (typeof filters)[number]["id"];
@@ -54,7 +54,7 @@ export function BookingHistoryTable() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-[34px] font-bold leading-tight text-text">Booking history</h1>
-          <p className="mt-2 text-sm text-muted">Every booking you&apos;ve made, including cancelled and refunded ones.</p>
+          <p className="mt-2 text-sm text-muted">Every booking you&apos;ve made, including cancelled ones.</p>
         </div>
         <Button variant="outline" className="border-line text-text hover:bg-surface-2" onClick={downloadCsv}>
           <Download size={16} aria-hidden /> Download receipts
@@ -64,7 +64,7 @@ export function BookingHistoryTable() {
       <dl className="mt-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Bookings" value={String(historyStats.bookings)} sub={`Since ${historyStats.since}`} Icon={FileText} />
         <Stat label="Events attended" value={String(historyStats.eventsAttended)} sub={historyStats.attendedNames} Icon={UserCheck} />
-        <Stat label="Total paid" value={formatKrw(historyStats.totalPaid)} sub="Refunds not included" Icon={Wallet} />
+        <Stat label="Total paid" value={formatKrw(historyStats.totalPaid)} sub="Confirmed bookings" Icon={Wallet} />
       </dl>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">

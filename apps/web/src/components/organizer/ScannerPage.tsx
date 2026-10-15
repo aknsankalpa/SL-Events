@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, CheckCircle2, ChevronDown, Keyboard, Link2, ScanLine, ShieldAlert, XCircle, TriangleAlert } from "lucide-react";
+import { Camera, CheckCircle2, Keyboard, Link2, ScanLine, ShieldAlert, XCircle, TriangleAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/Button";
 import { attendees, gates, recentScans, type ScanOutcome, type ScanRecord } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { useEventOps } from "./operations/useEventOps";
 import { EventPicker, OrgPageHeader, Panel } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 type Result = {
   outcome: ScanOutcome;
@@ -59,9 +60,9 @@ function useBrowserValue<T>(read: () => T, serverValue: T): T {
 
 export function ScannerPage() {
   const { event } = useOrganizer();
-  // The organizer's event-day rules for the selected event: paused state, name privacy, re-entry, sound.
+  // The organizer's event-day rules for the selected event: name privacy, re-entry, sound.
   const { ops } = useEventOps(event.id);
-  const { paused, settings } = ops;
+  const { settings } = ops;
   const [gate, setGate] = useState(gates[0]!);
   const [code, setCode] = useState("");
   const [result, setResult] = useState<Result>();
@@ -84,17 +85,6 @@ export function ScannerPage() {
       const value = raw.trim().toUpperCase();
       if (!value) return;
 
-      if (paused) {
-        // Nothing is admitted, and the attempt isn't counted as a refused ticket.
-        setResult({
-          outcome: "wrong_event",
-          title: "Check-in paused",
-          note: "The organizer has paused check-in. Don't admit anyone until it resumes.",
-        });
-        if (settings.soundFeedback) feedback("refuse");
-        return;
-      }
-
       const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
       const holder = attendees.find((a) => a.code === value);
       const other = otherEventCodes[value];
@@ -112,7 +102,7 @@ export function ScannerPage() {
           note: "This ticket is for a different event.",
         };
       } else if (!holder || holder.state === "cancelled") {
-        next = { outcome: "not_found", title: "Not valid", note: holder ? "This ticket was refunded." : "No ticket with that code." };
+        next = { outcome: "not_found", title: "Not valid", note: holder ? "This ticket was cancelled." : "No ticket with that code." };
       } else if ((holder.state === "checked_in" || used.current.has(value)) && !settings.allowReentry) {
         next = {
           outcome: "already_used",
@@ -145,7 +135,7 @@ export function ScannerPage() {
           : { ...c, rejected: c.rejected + 1 },
       );
     },
-    [paused, settings],
+    [settings],
   );
 
   const stopCamera = useCallback(() => {
@@ -229,16 +219,15 @@ export function ScannerPage() {
             <EventPicker />
             <label className="relative block">
               <span className="sr-only">Entrance</span>
-              <select
+              <Select
                 value={gate}
                 onChange={(e) => setGate(e.target.value)}
-                className="h-[3.25rem] cursor-pointer appearance-none rounded-xl border border-line bg-surface pl-4 pr-10 text-[13px] text-text focus:border-gold focus:outline-none"
+                className="h-[3.25rem] rounded-xl border border-line bg-surface pl-4 pr-3 text-[13px] text-text focus:border-gold focus:outline-none"
               >
                 {gates.map((g) => (
                   <option key={g}>{g}</option>
                 ))}
-              </select>
-              <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-[1.15rem] text-muted" />
+              </Select>
             </label>
           </>
         }
@@ -328,12 +317,6 @@ export function ScannerPage() {
         </div>
 
         <div className="space-y-4">
-          {paused && (
-            <p role="status" className="flex items-start gap-2.5 rounded-xl border border-amber/40 bg-amber/10 px-4 py-3 text-xs text-text">
-              <TriangleAlert size={14} aria-hidden className="mt-0.5 shrink-0 text-amber" />
-              Check-in is paused by the organizer. Scans are not admitted.
-            </p>
-          )}
           <section
             aria-live="polite"
             className={`rounded-xl border-2 p-5 ${

@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronDown, X, type LucideIcon } from "lucide-react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { X, type LucideIcon } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { EventThumb } from "@/components/ui/Card";
+import { Select, SelectOption } from "@/components/ui/Select";
 import { Breadcrumbs, type Crumb } from "@/components/ui/PageHeader";
 import { useOrganizer } from "./OrganizerContext";
 
@@ -36,32 +37,29 @@ export function OrgPageHeader({ crumbs, title, titleAside, actions, children }: 
 /** Event switcher shared by every event-scoped page. */
 export function EventPicker({ className = "" }: { className?: string }) {
   const { events, event, setEventId } = useOrganizer();
-  const id = useId();
   return (
-    <div className={`relative ${className}`}>
-      <div className="flex min-w-[15rem] items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-gold">
-        <EventThumb category={event.category} size={32} />
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[13px] font-bold text-text">{event.title}</p>
-          <p className="mt-0.5 text-[11px] text-dim">{event.dateLabel}</p>
-        </div>
-        <ChevronDown size={14} aria-hidden className="shrink-0 text-muted" />
-      </div>
-      <label htmlFor={id} className="sr-only">
-        Event
-      </label>
-      <select
-        id={id}
+    <div className={className}>
+      <Select
+        aria-label="Event"
         value={event.id}
         onChange={(e) => setEventId(e.target.value)}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        className="min-w-[15rem] w-full rounded-xl border border-line bg-surface px-3 py-2 focus:border-gold focus:outline-none"
+        triggerContent={
+          <span className="flex items-center gap-3">
+            <EventThumb category={event.category} size={32} />
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-[13px] font-bold text-text">{event.title}</span>
+              <span className="mt-0.5 block text-[11px] font-normal text-dim">{event.dateLabel}</span>
+            </span>
+          </span>
+        }
       >
         {events.map((e) => (
-          <option key={e.id} value={e.id}>
+          <SelectOption key={e.id} value={e.id} description={e.dateLabel}>
             {e.title}
-          </option>
+          </SelectOption>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }
@@ -88,8 +86,52 @@ export function StatCard({ label, value, sub, Icon, subTone = "default" }: StatP
   );
 }
 
-export function Panel({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <section className={`rounded-xl border border-line bg-surface ${className}`}>{children}</section>;
+export function Panel({ className = "", bare = false, children }: { className?: string; bare?: boolean; children: ReactNode }) {
+  // "bare" drops the card chrome so the content can sit inside another card (a tab panel).
+  return <section className={`${bare ? "" : "rounded-xl border border-line bg-surface"} ${className}`}>{children}</section>;
+}
+
+type TabSpec = { id: string; label: string; content: ReactNode };
+
+/**
+ * Several views in one card, so a page can fit one screen on desktop: the tab body scrolls inside the card instead
+ * of the page growing. On phones it simply stacks and the page scrolls.
+ */
+export function TabbedPanel({ label, tabs, className = "" }: { label: string; tabs: TabSpec[]; className?: string }) {
+  const uid = useId();
+  const [active, setActive] = useState(tabs[0]!.id);
+  const current = tabs.find((t) => t.id === active) ?? tabs[0]!;
+
+  return (
+    <section aria-label={label} className={`flex flex-col overflow-hidden rounded-xl border border-line bg-surface lg:min-h-0 ${className}`}>
+      <div role="tablist" aria-label={label} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 py-2.5 sm:px-4">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            id={`${uid}-${t.id}`}
+            aria-selected={current.id === t.id}
+            aria-controls={`${uid}-panel`}
+            onClick={() => setActive(t.id)}
+            className={`h-8 shrink-0 rounded-lg px-3 text-xs font-bold transition-colors focus-visible:focus-ring ${
+              current.id === t.id ? "bg-gold/15 text-gold" : "text-muted hover:text-text"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div
+        role="tabpanel"
+        id={`${uid}-panel`}
+        aria-labelledby={`${uid}-${current.id}`}
+        tabIndex={0}
+        className="overflow-auto focus-visible:focus-ring lg:min-h-0 lg:flex-1"
+      >
+        {current.content}
+      </div>
+    </section>
+  );
 }
 
 /** Native <dialog> wrapper: focus trapping, Esc to close and a backdrop come from the platform. */

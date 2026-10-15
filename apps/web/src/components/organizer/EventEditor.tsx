@@ -7,7 +7,6 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock,
   Eye,
   Globe,
@@ -27,6 +26,7 @@ import { fileToCoverDataUrl } from "@/lib/image";
 import { changeHistory, eventCategories, eventStatusLabel, formatEventDate, type OrganizerEvent } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { Dialog, OrgPageHeader, Panel } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 type Form = {
   name: string;
@@ -285,17 +285,16 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
                     Category
                   </label>
                   <div className="relative">
-                    <select
+                    <Select
                       id="edit-category"
                       value={form.category}
                       onChange={(e) => set({ category: e.target.value })}
-                      className="h-12 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface px-4 pr-10 text-sm text-text focus:border-gold focus:outline-none"
+                      className="h-12 w-full rounded-lg border border-line bg-surface px-4 text-sm text-text focus:border-gold focus:outline-none"
                     >
                       {eventCategories.map((c) => (
                         <option key={c}>{c}</option>
                       ))}
-                    </select>
-                    <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-4 text-muted" />
+                    </Select>
                   </div>
                 </div>
                 <Field label="Short tags" value={form.tags} onChange={(e) => set({ tags: e.target.value })} />
@@ -487,10 +486,10 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
               disabled={cancelled}
               onClick={() => setCancelOpen(true)}
             >
-              Cancel event and refund everyone
+              Cancel event
             </Button>
             <p className="mt-3 text-[11px] leading-relaxed text-dim">
-              Cancelling refunds all 118 paid bookings to the buyers&apos; refund accounts.
+              Cancelling takes the event off sale and cancels all 118 paid bookings. Buyers are told by email.
             </p>
           </section>
         </div>
@@ -498,8 +497,8 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
 
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel this event?">
         <p className="text-sm leading-relaxed text-muted">
-          <strong className="text-text">{event.title}</strong> will be taken off sale and all 118 paid bookings will be refunded to the buyers&apos;
-          refund accounts. This can&apos;t be undone.
+          <strong className="text-text">{event.title}</strong> will be taken off sale and all 118 paid bookings will be cancelled. Buyers are told by email.
+          This can&apos;t be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <Button variant="ghost" onClick={() => setCancelOpen(false)}>
@@ -508,13 +507,13 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
           <Button
             variant="danger"
             onClick={() => {
-              // TODO: call the cancel-and-refund API.
+              // TODO: call the cancel-event API.
               setCancelled(true);
               setCancelOpen(false);
-              setToast("Event cancelled. Refunds are being processed.");
+              setToast("Event cancelled. Buyers are being told.");
             }}
           >
-            Cancel event and refund
+            Cancel event
           </Button>
         </div>
       </Dialog>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Hourglass, ScanLine, Search, Star, TriangleAlert, UserCheck, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Hourglass, ScanLine, Search, Star, TriangleAlert, UserCheck, Users } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
 import { attendees as seed, attendeeStats, type Attendee } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { downloadCsv, EventPicker, OrgPageHeader, Panel, StatCard } from "./ui";
+import { Select } from "@/components/ui/Select";
 
 const PAGE_SIZE = 7;
 
@@ -231,14 +232,13 @@ function FilterSelect({
   return (
     <label className="relative block sm:w-48">
       <span className="sr-only">{label}</span>
-      <select
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-12 w-full cursor-pointer appearance-none rounded-xl border border-line bg-surface px-4 pr-10 text-[13px] text-text focus:border-gold focus:outline-none"
+        className="h-12 w-full rounded-xl border border-line bg-surface px-4 text-[13px] text-text focus:border-gold focus:outline-none"
       >
         {children}
-      </select>
-      <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-4 top-4 text-muted" />
+      </Select>
     </label>
   );
 }

@@ -30,7 +30,5 @@ export function useEventOps(eventId: string) {
     removeStaff: (s: StaffMember) =>
       apply((o) => ({ ...o, staff: o.staff.filter((x) => x.id !== s.id) }), { kind: "staff", text: `${s.name} was removed. Their access has ended` }),
     saveSettings: (settings: OpsSettings) => apply((o) => ({ ...o, settings }), { kind: "setting", text: "Event-day settings were updated" }),
-    setPaused: (paused: boolean) =>
-      apply((o) => ({ ...o, paused }), { kind: "system", text: paused ? "Check-in was paused for all scanners" : "Check-in was resumed" }),
   };
 }

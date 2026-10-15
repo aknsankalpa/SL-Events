@@ -7,7 +7,9 @@ type Point = { date: string; label: string; value: number };
 type Mode = "tickets" | "revenue";
 
 const DEFAULT_W = 680;
-const H = 250;
+const DEFAULT_H = 250;
+const MIN_H = 110;
+const MAX_H = 420;
 const PAD = { l: 48, r: 14, t: 16, b: 30 };
 
 const compactKrw = (n: number) => (n >= 1_000_000 ? `₩${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `₩${Math.round(n / 1000)}k` : `₩${n}`);
@@ -42,14 +44,18 @@ export function SalesChart({ series, avgPrice, periodLabel }: { series: Point[];
   const [mode, setMode] = useState<Mode>("tickets");
   const [hover, setHover] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  // Draw at the real pixel width so axis text stays readable on phones instead of shrinking with the SVG.
+  // Draw at the real pixel size so axis text stays readable instead of shrinking with the SVG. The height follows
+  // the space the card is given on desktop (the dashboard fits one screen) and is a fixed 250px on phones.
   const [W, setW] = useState(DEFAULT_W);
+  const [H, setH] = useState(DEFAULT_H);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const w = Math.round(entry?.contentRect.width ?? 0);
+      const h = Math.round(entry?.contentRect.height ?? 0);
       if (w > 0) setW(Math.max(280, w));
+      if (h > 0) setH(Math.min(MAX_H, Math.max(MIN_H, h)));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -74,11 +80,19 @@ export function SalesChart({ series, avgPrice, periodLabel }: { series: Point[];
   const labelEvery = W < 420 ? (n <= 8 ? 2 : n <= 16 ? 4 : 7) : n <= 8 ? 1 : n <= 16 ? 2 : 5;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6" aria-label="Sales overview">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <section
+      className="flex flex-col rounded-2xl border border-line bg-surface p-4 sm:p-5 lg:min-h-0"
+      aria-label="Sales overview"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
         <div>
           <h2 className="text-base font-bold text-text">Sales overview</h2>
-          <p className="mt-1 text-[11px] text-dim">Confirmed payments only · {periodLabel}</p>
+          <p className="mt-1 text-[11px] text-dim">
+            <strong className="text-sm font-bold text-text">
+              {mode === "tickets" ? total.toLocaleString("en-US") : formatKrw(total)}
+            </strong>{" "}
+            {mode === "tickets" ? "tickets sold" : "confirmed revenue"} · confirmed payments only · {periodLabel}
+          </p>
         </div>
         <div role="tablist" aria-label="Chart measure" className="inline-flex gap-1 rounded-xl border border-line bg-surface-2 p-1">
           {(["tickets", "revenue"] as const).map((m) => (
@@ -97,13 +111,8 @@ export function SalesChart({ series, avgPrice, periodLabel }: { series: Point[];
         </div>
       </div>
 
-      <p className="mt-5 text-[30px] font-bold leading-none text-text">
-        {mode === "tickets" ? total.toLocaleString("en-US") : formatKrw(total)}
-        <span className="ml-2 text-xs font-normal text-dim">{mode === "tickets" ? "tickets sold" : "confirmed revenue"}</span>
-      </p>
-
-      <div ref={box} className="relative mt-4">
-        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label={`${mode} per day, ${periodLabel}`}>
+      <div ref={box} className="relative mt-3 lg:min-h-0 lg:flex-1">
+        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full lg:h-full" role="img" aria-label={`${mode} per day, ${periodLabel}`}>
           <defs>
             <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="#f7cb60" stopOpacity="0.38" />

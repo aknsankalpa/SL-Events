@@ -3,7 +3,6 @@ import { createPersistedStore } from "./persistedStore";
 export type OrganizerNotificationKey =
   | "newBooking"
   | "paymentProof"
-  | "refundRequest"
   | "lowStock"
   | "dailySummary"
   | "platformNews";
@@ -45,7 +44,6 @@ export const seedProfile: OrganizerProfile = {
   notifications: {
     newBooking: true,
     paymentProof: true,
-    refundRequest: true,
     lowStock: true,
     dailySummary: false,
     platformNews: false,
@@ -54,7 +52,27 @@ export const seedProfile: OrganizerProfile = {
   memberSince: "August 2025",
 };
 
-export const profileStore = createPersistedStore<OrganizerProfile>("sl-events:organizer-profile:v1", seedProfile);
+/** A profile saved before a field existed gets that field's default instead of `undefined`. */
+function normalizeProfile(stored: unknown): OrganizerProfile {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return seedProfile;
+  const s = stored as Partial<OrganizerProfile>;
+  const object = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
+  return {
+    ...seedProfile,
+    ...s,
+    payout: { ...seedProfile.payout, ...object(s.payout) },
+    // Only the keys that still exist: a profile saved earlier may carry notification settings that were removed.
+    notifications: Object.fromEntries(
+      Object.entries({ ...seedProfile.notifications, ...object(s.notifications) }).filter(([k]) => k in seedProfile.notifications),
+    ) as OrganizerProfile["notifications"],
+  };
+}
+
+export const profileStore = createPersistedStore<OrganizerProfile>(
+  "sl-events:organizer-profile:v1",
+  seedProfile,
+  normalizeProfile,
+);
 
 /** "123401-04-889120" → "••••••••• 9120" for display; the full number is only shown while editing. */
 export function maskAccount(num: string): string {

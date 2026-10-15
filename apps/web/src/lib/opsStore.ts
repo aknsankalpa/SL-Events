@@ -1,4 +1,4 @@
-import { seedOps, type EventOps } from "./operations";
+import { defaultSettings, seedOps, type EventOps } from "./operations";
 
 /**
  * Event-day staff, settings and activity per event, kept in localStorage until the API exists.
@@ -15,7 +15,19 @@ function read(): Record<string, EventOps> {
   try {
     const raw = window.localStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, EventOps>) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    // Records saved before a setting existed get its default, and a malformed record falls back to the seed.
+    const out: Record<string, EventOps> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const v = value as Partial<EventOps>;
+      out[id] = {
+        staff: Array.isArray(v.staff) ? v.staff : [],
+        activity: Array.isArray(v.activity) ? v.activity : [],
+        settings: { ...defaultSettings, ...(v.settings && typeof v.settings === "object" ? v.settings : {}) },
+      };
+    }
+    return out;
   } catch {
     return {};
   }

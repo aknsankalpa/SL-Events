@@ -17,14 +17,14 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "under_review", label: "Under review" },
   { id: "awaiting_payment", label: "Awaiting payment" },
   { id: "rejected", label: "Rejected" },
-  { id: "refunded", label: "Refunded" },
+  { id: "cancelled", label: "Cancelled" },
 ];
 
 export function BookingsPage() {
   const { event } = useOrganizer();
   const [tab, setTab] = useState<TabId>("all");
   const [query, setQuery] = useState("");
-  const [rows, setRows] = useState<OrgBooking[]>(orgBookings);
+  const rows: OrgBooking[] = orgBookings;
   const [openId, setOpenId] = useState<string>(orgBookings[0]!.id);
   const [drawer, setDrawer] = useState(false);
 
@@ -41,16 +41,6 @@ export function BookingsPage() {
   function open(id: string) {
     setOpenId(id);
     setDrawer(true);
-  }
-
-  function refund(id: string) {
-    setRows((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? { ...b, status: "refunded", history: [{ label: "Refund sent", at: "Today" }, ...b.history] }
-          : b,
-      ),
-    );
   }
 
   return (
@@ -187,7 +177,7 @@ export function BookingsPage() {
           <div
             className={`${drawer ? "fixed inset-0 z-40 overflow-y-auto bg-page p-4 sm:p-6" : "hidden"} xl:sticky xl:top-6 xl:block xl:overflow-visible xl:bg-transparent xl:p-0`}
           >
-            <BookingDetail booking={selected} onClose={() => setDrawer(false)} onRefund={() => refund(selected.id)} />
+            <BookingDetail booking={selected} onClose={() => setDrawer(false)} />
           </div>
         )}
       </div>
@@ -195,9 +185,8 @@ export function BookingsPage() {
   );
 }
 
-function BookingDetail({ booking: b, onClose, onRefund }: { booking: OrgBooking; onClose: () => void; onRefund: () => void }) {
+function BookingDetail({ booking: b, onClose }: { booking: OrgBooking; onClose: () => void }) {
   const [sent, setSent] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const meta = orgBookingStatus[b.status];
 
   return (
@@ -251,7 +240,7 @@ function BookingDetail({ booking: b, onClose, onRefund }: { booking: OrgBooking;
                     </span>
                     <span className="mt-1 block font-mono text-[10px] text-dim">{h.code}</span>
                   </span>
-                  <Badge tone={b.status === "refunded" ? "neutral" : "success"}>Valid</Badge>
+                  <Badge tone={b.status === "cancelled" ? "neutral" : "success"}>Valid</Badge>
                 </li>
               ))}
             </ul>
@@ -286,48 +275,16 @@ function BookingDetail({ booking: b, onClose, onRefund }: { booking: OrgBooking;
           </ul>
         </section>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-line text-text hover:bg-surface-2"
-            disabled={b.status !== "paid"}
-            // TODO: re-send the ticket email through the API.
-            onClick={() => setSent(true)}
-          >
-            <Mail size={14} aria-hidden /> {sent ? "Sent" : "Resend tickets"}
-          </Button>
-          {confirming ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                onRefund();
-                setConfirming(false);
-              }}
-            >
-              Confirm refund
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={b.status === "refunded" || b.status === "awaiting_payment"}
-              className="border-danger/60 text-danger hover:bg-danger/10"
-              onClick={() => setConfirming(true)}
-            >
-              Refund
-            </Button>
-          )}
-        </div>
-        {confirming && (
-          <p className="-mt-3 text-[11px] text-dim">
-            This marks the booking as refunded and invalidates its tickets.{" "}
-            <button type="button" onClick={() => setConfirming(false)} className="font-bold text-amber">
-              Cancel
-            </button>
-          </p>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full border-line text-text hover:bg-surface-2"
+          disabled={b.status !== "paid"}
+          // TODO: re-send the ticket email through the API.
+          onClick={() => setSent(true)}
+        >
+          <Mail size={14} aria-hidden /> {sent ? "Sent" : "Resend tickets"}
+        </Button>
       </div>
     </Panel>
   );
