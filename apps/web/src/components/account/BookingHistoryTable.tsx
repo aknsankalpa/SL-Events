@@ -2,28 +2,32 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, FileText, Search, Ticket, UserCheck, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileText, Loader2, Receipt, Search, Ticket, UserCheck, Wallet } from "lucide-react";
+import { useSession } from "@/components/auth/useSession";
+import { useBookings } from "@/components/booking/useBookings";
+import { LinkButton } from "@/components/ui/Button";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { bookingHref, bookings, historyStats, ticketCount, type Booking } from "@/lib/bookings";
+import { bookingEvent, historyTotals, ticketCount, type Booking } from "@/lib/bookings";
 import { formatKrw, formatPrice } from "@/lib/format";
+import { downloadReceipt, receiptAvailable } from "@/lib/receipt";
 
 const filters = [
   { id: "all", label: "All", match: () => true },
   { id: "confirmed", label: "Confirmed", match: (b: Booking) => b.status === "confirmed" },
   { id: "progress", label: "In progress", match: (b: Booking) => ["under_review", "awaiting_payment", "proof_rejected"].includes(b.status) },
   { id: "past", label: "Past", match: (b: Booking) => b.status === "attended" },
-  { id: "cancelled", label: "Cancelled", match: (b: Booking) => b.status === "cancelled" },
+  { id: "cancelled", label: "Cancelled & expired", match: (b: Booking) => b.status === "cancelled" || b.status === "expired" },
 ] as const;
 
 type FilterId = (typeof filters)[number]["id"];
 
 const PAGE_SIZE = 10;
 
-function downloadCsv() {
+function downloadCsv(bookings: Booking[]) {
   const rows = [
-    ["Booking", "Event", "Event date", "Tickets", "Amount (KRW)", "Payment", "Status"],
-    ...bookings.map((b) => [b.id, b.eventTitle, b.eventDate, String(ticketCount(b)), String(b.total), b.paymentMethod, b.status]),
+    ["Booking", "Payment reference", "Event", "Event date", "Tickets", "Amount (KRW)", "Payment", "Status"],
+    ...bookings.map((b) => [b.id, b.id, b.eventTitle, b.eventDate, String(ticketCount(b)), String(b.total), b.paymentMethod, b.status]),
   ];
   const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -35,6 +39,9 @@ function downloadCsv() {
 }
 
 export function BookingHistoryTable() {
+  const { bookings, ready } = useBookings();
+  const { user } = useSession();
+  const historyStats = historyTotals(bookings);
   const [filter, setFilter] = useState<FilterId>("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -43,7 +50,7 @@ export function BookingHistoryTable() {
     const f = filters.find((x) => x.id === filter)!;
     const q = query.trim().toLowerCase();
     return bookings.filter((b) => f.match(b) && (!q || `${b.id} ${b.eventTitle}`.toLowerCase().includes(q)));
-  }, [filter, query]);
+  }, [bookings, filter, query]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -56,14 +63,14 @@ export function BookingHistoryTable() {
           <h1 className="font-display text-[34px] font-bold leading-tight text-text">Booking history</h1>
           <p className="mt-2 text-sm text-muted">Every booking you&apos;ve made, including cancelled ones.</p>
         </div>
-        <Button variant="outline" className="border-line text-text hover:bg-surface-2" onClick={downloadCsv}>
-          <Download size={16} aria-hidden /> Download receipts
+        <Button variant="outline" className="border-line text-text hover:bg-surface-2" onClick={() => downloadCsv(bookings)} disabled={bookings.length === 0}>
+          <Download size={16} aria-hidden /> Download list (CSV)
         </Button>
       </div>
 
       <dl className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Stat label="Bookings" value={String(historyStats.bookings)} sub={`Since ${historyStats.since}`} Icon={FileText} />
-        <Stat label="Events attended" value={String(historyStats.eventsAttended)} sub={historyStats.attendedNames} Icon={UserCheck} />
+        <Stat label="Bookings" value={String(historyStats.bookings)} sub="All your bookings" Icon={FileText} />
+        <Stat label="Events attended" value={String(historyStats.eventsAttended)} sub={historyStats.attendedNames || "None yet"} Icon={UserCheck} />
         <Stat label="Total paid" value={formatKrw(historyStats.totalPaid)} sub="Confirmed bookings" Icon={Wallet} />
       </dl>
 
@@ -106,7 +113,7 @@ export function BookingHistoryTable() {
         <table className="w-full min-w-[46rem] text-left text-[13px]">
           <thead className="border-b border-line text-[10px] uppercase tracking-wider text-dim">
             <tr>
-              {["Booking", "Event", "Event date", "Tickets", "Amount", "Payment", "Status"].map((h) => (
+              {["Booking · reference", "Event", "Event date", "Tickets", "Amount", "Payment", "Status"].map((h) => (
                 <th key={h} scope="col" className="px-4 py-3.5 font-bold first:pl-5">
                   {h}
                 </th>
@@ -118,7 +125,7 @@ export function BookingHistoryTable() {
           </thead>
           <tbody>
             {visible.map((b) => {
-              const href = bookingHref(b);
+              const href = `/booking-history/${b.id}`;
               return (
                 <tr key={b.id} className="border-b border-line last:border-b-0 hover:bg-surface-2/50">
                   <td className="py-4 pl-5 pr-4 font-mono text-[11px] text-muted">{b.id}</td>
@@ -130,12 +137,27 @@ export function BookingHistoryTable() {
                   <td className="px-4 py-4">
                     <StatusBadge status={b.status} />
                   </td>
-                  <td className="pr-4 text-right">
-                    {href && (
-                      <Link href={href} aria-label={`Open booking ${b.id}`} className="inline-flex text-muted hover:text-gold">
-                        <ChevronRight size={16} />
-                      </Link>
+                  <td className="whitespace-nowrap pr-4 text-right">
+                    {receiptAvailable(b) && (
+                      <button
+                        type="button"
+                        aria-label={`Download receipt for ${b.id}`}
+                        title="Download receipt"
+                        onClick={() =>
+                          downloadReceipt(b, {
+                            eventTitle: bookingEvent(b)?.title ?? b.eventTitle,
+                            customer: user?.name ?? "Customer",
+                            email: user?.email ?? "",
+                          })
+                        }
+                        className="mr-2 inline-flex align-middle text-muted hover:text-gold"
+                      >
+                        <Receipt size={15} />
+                      </button>
                     )}
+                    <Link href={href} aria-label={`Open booking ${b.id}`} className="inline-flex align-middle text-muted hover:text-gold">
+                      <ChevronRight size={16} />
+                    </Link>
                   </td>
                 </tr>
               );
@@ -143,7 +165,20 @@ export function BookingHistoryTable() {
             {visible.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted">
-                  No bookings match your filters.
+                  {!ready ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 size={14} aria-hidden className="animate-spin text-gold" /> Loading your bookings…
+                    </span>
+                  ) : bookings.length === 0 ? (
+                    <span>
+                      You haven&apos;t booked anything yet.
+                      <LinkButton href="/events" size="sm" className="ml-3">
+                        Explore events
+                      </LinkButton>
+                    </span>
+                  ) : (
+                    "No bookings match your filters."
+                  )}
                 </td>
               </tr>
             )}

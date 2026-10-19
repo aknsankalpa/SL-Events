@@ -84,9 +84,18 @@ export function TicketViewer({ event, bookingId, tickets }: Props) {
           </div>
 
           <div className="px-6 pb-6 pt-7">
-            <div className="mx-auto w-fit rounded-2xl bg-white p-4">
-              {/* TODO: encode a signed, single-use token issued by the API instead of the plain ticket code. */}
-              <QRCodeSVG value={ticket.code} size={160} level="M" marginSize={0} title={`QR code for ticket ${ticket.code}`} />
+            <div className="relative mx-auto w-fit rounded-2xl bg-white p-4">
+              {ticket.scanned ? (
+                // A used ticket shows no scannable code, so a screenshot of it is of no use.
+                <div className="flex size-40 flex-col items-center justify-center gap-2 text-center text-slate-500">
+                  <ShieldCheck size={36} aria-hidden />
+                  <span className="text-sm font-bold">Ticket used</span>
+                  <span className="text-[11px]">Scanned at the entrance</span>
+                </div>
+              ) : (
+                // TODO: encode a signed, single-use token issued by the API instead of the plain ticket code.
+                <QRCodeSVG value={ticket.code} size={160} level="M" marginSize={0} title={`QR code for ticket ${ticket.code}`} />
+              )}
             </div>
             <p className="mt-4 text-center font-mono text-sm tracking-widest text-text">{ticket.code}</p>
 
@@ -116,23 +125,27 @@ export function TicketViewer({ event, bookingId, tickets }: Props) {
         </p>
 
         {/* Off-screen canvas used only to export the QR as a PNG. */}
-        <div className="sr-only" aria-hidden>
-          <QRCodeCanvas ref={exportRef} value={ticket.code} size={600} level="M" marginSize={4} />
-        </div>
+        {!ticket.scanned && (
+          <div className="sr-only" aria-hidden>
+            <QRCodeCanvas ref={exportRef} value={ticket.code} size={600} level="M" marginSize={4} />
+          </div>
+        )}
       </div>
 
       <div>
         <div className="flex flex-wrap gap-2">
           <Badge tone={ticket.scanned ? "neutral" : "success"} dot>
-            {ticket.scanned ? "Scanned" : "Valid"}
+            {ticket.scanned ? "Used" : "Valid"}
           </Badge>
-          <Badge>{ticket.scanned ? "Already used" : "Not scanned yet"}</Badge>
+          <Badge>{ticket.scanned ? "Already scanned" : "Not scanned yet"}</Badge>
         </div>
         <h1 className="mt-4 font-display text-[34px] font-bold leading-tight text-text sm:text-[42px]">{event.title}</h1>
-        <p className="mt-3 text-sm text-muted">Show this QR code at the door. Each ticket can be scanned once.</p>
+        <p className="mt-3 text-sm text-muted">
+          {ticket.scanned ? "This ticket was scanned at the entrance and can't be used again." : "Show this QR code at the door. Each ticket can be scanned once."}
+        </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={saveImage}>
+          <Button onClick={saveImage} disabled={ticket.scanned}>
             <Download size={16} aria-hidden /> Save as image
           </Button>
           <Button variant="outline" className="border-line text-text hover:bg-surface-2" onClick={addToCalendar}>
@@ -187,7 +200,7 @@ export function TicketViewer({ event, bookingId, tickets }: Props) {
                     </p>
                     <p className="mt-1 font-mono text-[11px] text-dim">{t.code}</p>
                   </div>
-                  <Badge tone="success">Valid</Badge>
+                  <Badge tone={t.scanned ? "neutral" : "success"}>{t.scanned ? "Used" : "Valid"}</Badge>
                   <Button
                     size="sm"
                     variant="outline"

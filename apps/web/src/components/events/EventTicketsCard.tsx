@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalendarPlus, Check, Heart, Share2, Ticket } from "lucide-react";
+import { useSession } from "@/components/auth/useSession";
 import { Badge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/Button";
 import { buildIcs, downloadIcs } from "@/lib/calendar";
@@ -11,6 +12,7 @@ import { formatPrice } from "@/lib/format";
 export function EventTicketsCard({ event, preview = false }: { event: EventItem; preview?: boolean }) {
   const [saved, setSaved] = useState(false);
   const [shared, setShared] = useState(false);
+  const { user, ready } = useSession();
   const allSoldOut = event.ticketTypes.every((t) => ticketsLeft(t) === 0);
 
   async function share() {
@@ -65,7 +67,7 @@ export function EventTicketsCard({ event, preview = false }: { event: EventItem;
                 ) : left <= 10 ? (
                   <Badge tone="danger">{left} left</Badge>
                 ) : (
-                  <Badge tone="success">Available</Badge>
+                  <Badge tone="success">{left} left</Badge>
                 )}
               </div>
             </li>
@@ -94,7 +96,11 @@ export function EventTicketsCard({ event, preview = false }: { event: EventItem;
         </LinkButton>
       )}
       <p className="mt-3 text-center text-[11px] text-dim">
-        {preview ? "Preview only. Buying is switched off." : "You'll pay by bank transfer, then upload your receipt."}
+        {preview
+          ? "Preview only. Buying is switched off."
+          : ready && !user
+            ? "You'll be asked to log in or create a free account first. Payment is by bank transfer."
+            : "You'll pay by bank transfer, then upload your receipt."}
       </p>
 
       <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-xs font-bold">

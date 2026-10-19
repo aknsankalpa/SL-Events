@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AlertCircle, CalendarClock, CheckCircle2, Check, Clock, Hourglass, Receipt, Sparkles, type LucideIcon } from "lucide-react";
-import { Toggle } from "@/components/ui/Toggle";
-import { channelSettings, notifications as initial, topicSettings, type NotificationItem, type NotificationSetting } from "@/lib/content";
+import { AlertCircle, BellOff, CalendarClock, Check, CheckCircle2, Clock, Hourglass, Loader2, Megaphone, Receipt, Sparkles, type LucideIcon } from "lucide-react";
+import { NotificationPreferences } from "@/components/account/NotificationPreferences";
+import type { Notification } from "@/lib/notifications";
+import { useNotifications, type NotificationView } from "./useNotifications";
 
-const icons: Record<NotificationItem["icon"], LucideIcon> = {
+const icons: Record<Notification["icon"], LucideIcon> = {
   check: CheckCircle2,
   alert: AlertCircle,
   hourglass: Hourglass,
@@ -14,9 +15,10 @@ const icons: Record<NotificationItem["icon"], LucideIcon> = {
   calendar: CalendarClock,
   sparkles: Sparkles,
   receipt: Receipt,
+  megaphone: Megaphone,
 };
 
-const tones: Record<NotificationItem["tone"], string> = {
+const tones: Record<Notification["tone"], string> = {
   success: "bg-success/15 text-success",
   danger: "bg-danger/15 text-danger",
   warning: "bg-amber/15 text-amber",
@@ -25,28 +27,24 @@ const tones: Record<NotificationItem["tone"], string> = {
 
 const tabs = [
   { id: "all", label: "All", match: () => true },
-  { id: "unread", label: "Unread", match: (n: NotificationItem) => !!n.unread },
-  { id: "bookings", label: "Bookings", match: (n: NotificationItem) => n.kind === "booking" },
-  { id: "events", label: "Events", match: (n: NotificationItem) => n.kind === "event" },
+  { id: "unread", label: "Unread", match: (n: NotificationView) => n.unread },
+  { id: "bookings", label: "Bookings", match: (n: NotificationView) => n.kind === "booking" },
+  { id: "events", label: "Events", match: (n: NotificationView) => n.kind === "event" },
+  { id: "announcements", label: "Announcements", match: (n: NotificationView) => n.kind === "announcement" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
 
+/** Booking updates, event news and announcements, with the settings that control them. */
 export function NotificationCenter() {
-  const [items, setItems] = useState(initial);
+  const { items, unread, ready, markRead, markAllRead } = useNotifications();
   const [tab, setTab] = useState<TabId>("all");
-  const [settings, setSettings] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries([...channelSettings, ...topicSettings].map((s) => [s.id, s.on])),
-  );
 
-  const unread = items.filter((n) => n.unread).length;
   const visible = items.filter(tabs.find((t) => t.id === tab)!.match);
-  const groups = (["Today", "This week"] as const)
-    .map((g) => ({ name: g, list: visible.filter((n) => n.group === g) }))
-    .filter((g) => g.list.length > 0);
-
-  const markRead = (id: string) => setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
-  const markAllRead = () => setItems((prev) => prev.map((n) => ({ ...n, unread: false })));
+  const groups = [
+    { name: "Needs your attention", list: visible.filter((n) => n.attention) },
+    { name: "Updates", list: visible.filter((n) => !n.attention) },
+  ].filter((g) => g.list.length > 0);
 
   return (
     <div className="mx-auto grid max-w-site items-start gap-8 px-5 py-10 lg:grid-cols-[1fr_21rem]">
@@ -68,7 +66,7 @@ export function NotificationCenter() {
           </button>
         </div>
 
-        <div role="tablist" aria-label="Filter notifications" className="mt-6 flex gap-6 border-b border-line">
+        <div role="tablist" aria-label="Filter notifications" className="mt-6 flex gap-6 overflow-x-auto border-b border-line">
           {tabs.map((t) => {
             const count = items.filter(t.match).length;
             const active = tab === t.id;
@@ -78,7 +76,7 @@ export function NotificationCenter() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(t.id)}
-                className={`-mb-px flex items-center gap-2 border-b-2 pb-3 text-[13px] font-bold transition-colors focus-visible:focus-ring ${
+                className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 pb-3 text-[13px] font-bold transition-colors focus-visible:focus-ring ${
                   active ? "border-amber text-gold" : "border-transparent text-muted hover:text-text"
                 }`}
               >
@@ -89,84 +87,67 @@ export function NotificationCenter() {
           })}
         </div>
 
-        {groups.map((g) => (
-          <section key={g.name} aria-label={g.name} className="mt-6">
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-widest text-dim">{g.name}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-              {g.list.map((n) => {
-                const Icon = icons[n.icon];
-                return (
-                  <li key={n.id} className={`flex gap-4 p-5 ${n.unread ? "bg-surface-2/60" : ""}`}>
-                    <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${tones[n.tone]}`}>
-                      <Icon size={18} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-[13px] font-bold text-text">{n.title}</h3>
-                        <span className="flex shrink-0 items-center gap-2 text-[11px] text-dim">
-                          {n.time}
-                          {n.unread && <span aria-label="Unread" className="size-2 rounded-full bg-amber" />}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted">{n.body}</p>
-                      {n.action && (
-                        <Link
-                          href={n.action.href}
-                          onClick={() => markRead(n.id)}
-                          className="mt-2 inline-block text-xs font-bold text-amber hover:text-gold"
-                        >
-                          {n.action.label}
-                        </Link>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+        {!ready && (
+          <p role="status" className="mt-8 flex items-center justify-center gap-3 text-sm text-muted">
+            <Loader2 size={16} aria-hidden className="animate-spin text-gold" /> Loading…
+          </p>
+        )}
 
-        {groups.length === 0 && (
-          <p className="mt-8 rounded-xl border border-line bg-surface p-10 text-center text-sm text-muted">You&apos;re all caught up.</p>
+        {ready &&
+          groups.map((g) => (
+            <section key={g.name} aria-label={g.name} className="mt-6">
+              <h2 className="mb-3 text-[11px] font-bold uppercase tracking-widest text-dim">{g.name}</h2>
+              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+                {g.list.map((n) => {
+                  const Icon = icons[n.icon];
+                  return (
+                    <li key={n.id} className={`flex gap-4 p-5 ${n.unread ? "bg-surface-2/60" : ""}`}>
+                      <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${tones[n.tone]}`}>
+                        <Icon size={18} aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-[13px] font-bold text-text">{n.title}</h3>
+                          <span className="flex shrink-0 items-center gap-2 text-[11px] text-dim">
+                            {n.time}
+                            {n.unread && <span aria-label="Unread" className="size-2 rounded-full bg-amber" />}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted">{n.body}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-4">
+                          {n.action && (
+                            <Link href={n.action.href} onClick={() => markRead(n.id)} className="text-xs font-bold text-amber hover:text-gold">
+                              {n.action.label}
+                            </Link>
+                          )}
+                          {n.unread && (
+                            <button type="button" onClick={() => markRead(n.id)} className="text-[11px] text-dim hover:text-text">
+                              Mark as read
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+
+        {ready && groups.length === 0 && (
+          <div className="mt-8 rounded-xl border border-line bg-surface p-10 text-center">
+            <BellOff size={26} aria-hidden className="mx-auto text-dim" />
+            <p className="mt-3 text-sm font-bold text-text">{tab === "unread" ? "You're all caught up" : "Nothing here yet"}</p>
+            <p className="mt-1 text-xs text-muted">Updates about your bookings, events and SL Events will show up here.</p>
+          </div>
         )}
       </div>
 
       <aside className="rounded-xl border border-line bg-surface p-6 lg:sticky lg:top-[108px]">
         <h2 className="text-lg font-bold text-text">Notification settings</h2>
-        <p className="mt-1 text-[11px] text-dim">Choose how we reach you.</p>
-        <SettingGroup title="Channels" items={channelSettings} state={settings} onChange={setSettings} />
-        <div className="my-5 border-t border-line" />
-        <SettingGroup title="What to send" items={topicSettings} state={settings} onChange={setSettings} />
+        <p className="mb-5 mt-1 text-[11px] text-dim">Choose how we reach you.</p>
+        <NotificationPreferences />
       </aside>
-    </div>
-  );
-}
-
-function SettingGroup({
-  title,
-  items,
-  state,
-  onChange,
-}: {
-  title: string;
-  items: NotificationSetting[];
-  state: Record<string, boolean>;
-  onChange: (next: Record<string, boolean>) => void;
-}) {
-  return (
-    <div className="mt-5">
-      <h3 className="mb-4 text-[10px] font-bold uppercase tracking-widest text-dim">{title}</h3>
-      <ul className="space-y-4">
-        {items.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-4">
-            <div className="leading-tight">
-              <p className="text-[13px] font-bold text-text">{s.label}</p>
-              {s.hint && <p className="mt-1 text-[11px] text-dim">{s.hint}</p>}
-            </div>
-            <Toggle label={s.label} checked={state[s.id] ?? false} disabled={s.locked} onChange={(v) => onChange({ ...state, [s.id]: v })} />
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

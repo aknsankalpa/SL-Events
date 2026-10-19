@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CheckCircle2, CalendarDays, ChevronRight, Globe, Landmark, Mail, MapPin, Phone, Ticket, Upload, User } from "lucide-react";
 import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
 import { EventTicketsCard } from "@/components/events/EventTicketsCard";
@@ -7,6 +8,7 @@ import { RichText } from "@/components/ui/RichText";
 import { Badge } from "@/components/ui/StatusBadge";
 import { naverMapUrl } from "@/lib/calendar";
 import { categories, type EventItem } from "@/lib/data";
+import { organizerByName, slugify } from "@/lib/organizers";
 import { normalizeUrl } from "@/lib/richText";
 
 type Props = {
@@ -20,8 +22,12 @@ type Props = {
 /** The customer-facing event page body. Shared by the public route and the organizer's draft preview. */
 export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
   const categoryLabel = categories.find((c) => c.id === event.category)?.label ?? "Events";
-  const website = event.organizerLink ? normalizeUrl(event.organizerLink) : null;
-  const hasHostDetails = !!(event.organizerAbout || event.organizerEmail || event.organizerPhone || website);
+  // Organizer details: what the organizer wrote on the event, otherwise their public profile.
+  const profile = organizerByName(event.organizer);
+  const about = event.organizerAbout ?? profile?.about;
+  const email = event.organizerEmail ?? profile?.email;
+  const link = event.organizerLink ?? profile?.link;
+  const website = link ? normalizeUrl(link) : null;
 
   return (
     <div className="mx-auto max-w-site px-5 pb-16 pt-8">
@@ -65,7 +71,7 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
           {event.tagline && <p className="mt-3 text-sm text-muted">{event.tagline}</p>}
 
           <ul className="mt-6 grid gap-3 sm:grid-cols-3">
-            <InfoTile Icon={CalendarDays} title={event.longDate} sub={`${event.time} Korea time`} />
+            <InfoTile Icon={CalendarDays} title={event.longDate} sub={`${event.time} · Korea time (KST)`} />
             <InfoTile Icon={MapPin} title={event.venue} sub={event.area} />
             <InfoTile Icon={User} title={event.organizer} sub="Organizer" />
           </ul>
@@ -82,17 +88,21 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
             )}
           </Section>
 
-          {hasHostDetails && (
-            <Section title="Hosted by">
-              <div className="rounded-xl border border-line bg-surface p-5">
-                <p className="text-sm font-bold text-text">{event.organizer}</p>
-                {event.organizerAbout && (
-                  <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted">{event.organizerAbout}</p>
-                )}
+          <Section title="Hosted by">
+            <div className="rounded-xl border border-line bg-surface p-5">
+              <p className="text-sm font-bold text-text">{event.organizer}</p>
+              {about && <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted">{about}</p>}
+              {profile && !preview && (
+                <p className="mt-3 text-xs text-dim">
+                  {profile.eventCount} upcoming event{profile.eventCount === 1 ? "" : "s"} ·{" "}
+                  <Link href={`/events?organizer=${slugify(event.organizer)}`} className="font-bold text-amber hover:text-gold">
+                    See all events by this organizer
+                  </Link>
+                </p>
+              )}
+              {(email || event.organizerPhone || website) && (
                 <ul className="mt-4 flex flex-wrap gap-2">
-                  {event.organizerEmail && (
-                    <ContactChip href={`mailto:${event.organizerEmail}`} Icon={Mail} label={event.organizerEmail} preview={preview} />
-                  )}
+                  {email && <ContactChip href={`mailto:${email}`} Icon={Mail} label={email} preview={preview} />}
                   {event.organizerPhone && (
                     <ContactChip
                       href={`tel:${event.organizerPhone.replace(/[^\d+]/g, "")}`}
@@ -111,9 +121,9 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
                     />
                   )}
                 </ul>
-              </div>
-            </Section>
-          )}
+              )}
+            </div>
+          </Section>
 
           {event.seatingPlan && (
             <Section title="Seating plan">

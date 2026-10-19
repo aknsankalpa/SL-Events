@@ -4,23 +4,27 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { EventCard } from "@/components/events/EventCard";
 import { LinkButton } from "@/components/ui/Button";
-import { cities, homeEvents, totalUpcomingEvents } from "@/lib/data";
+import { citiesWithEvents, events, totalUpcomingEvents } from "@/lib/data";
 
-const filters = ["All", ...cities] as const;
+const filters = ["All", ...citiesWithEvents] as const;
+const PREVIEW = 6;
 
+/** Upcoming events, soonest first, with a location filter. The full list with every filter lives on /events. */
 export function EventsNearYou() {
   const [city, setCity] = useState<(typeof filters)[number]>("All");
-  const visible = city === "All" ? homeEvents : homeEvents.filter((e) => e.city === city);
+  const sorted = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const inCity = city === "All" ? sorted : sorted.filter((e) => e.city === city);
+  const visible = inCity.slice(0, PREVIEW);
 
   return (
-    <section className="border-y border-line bg-surface/40 py-16">
+    <section id="upcoming" className="scroll-mt-24 border-y border-line bg-surface/40 py-16">
       <div className="mx-auto max-w-site px-5">
         <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-widest text-amber">Upcoming</p>
-            <h2 className="font-display text-[34px] font-bold leading-tight text-text">Events near you</h2>
+            <h2 className="font-display text-[34px] font-bold leading-tight text-text">Upcoming events</h2>
           </div>
-          <div role="group" aria-label="Filter by city" className="flex flex-wrap gap-2">
+          <div role="group" aria-label="Filter by location" className="flex flex-wrap gap-2">
             {filters.map((f) => (
               <button
                 key={f}
@@ -52,8 +56,8 @@ export function EventsNearYou() {
         )}
 
         <div className="mt-10 flex justify-center">
-          <LinkButton href="/events" variant="outline">
-            See all {totalUpcomingEvents} events <ArrowRight size={16} aria-hidden />
+          <LinkButton href={city === "All" ? "/events" : `/events?city=${encodeURIComponent(city)}`} variant="outline">
+            Explore all {city === "All" ? totalUpcomingEvents : inCity.length} events <ArrowRight size={16} aria-hidden />
           </LinkButton>
         </div>
       </div>

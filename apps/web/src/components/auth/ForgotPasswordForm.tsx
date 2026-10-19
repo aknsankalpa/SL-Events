@@ -45,9 +45,15 @@ export function ForgotPasswordForm() {
       {sentTo ? (
         <div role="status" className="mt-6 flex items-start gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm text-text">
           <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
-          <p>
-            If an account exists for <strong>{sentTo}</strong>, a reset link is on its way.
-          </p>
+          <div>
+            <p>
+              If an account exists for <strong>{sentTo}</strong>, a reset link is on its way.
+            </p>
+            {/* No real email is sent yet; this stands in for clicking the link in it. */}
+            <Link href={`/reset-password?email=${encodeURIComponent(sentTo)}`} className="mt-2 inline-block text-xs font-bold text-amber hover:text-gold">
+              Open the reset link (preview)
+            </Link>
+          </div>
         </div>
       ) : (
         <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">

@@ -8,6 +8,7 @@ import {
   EyeOff,
   Hash,
   ImagePlus,
+  Layers,
   Loader2,
   Minus,
   MousePointer2,
@@ -16,6 +17,7 @@ import {
   ScanSearch,
   SquareDashedMousePointer,
   Trash2,
+  TriangleAlert,
   Undo2,
   Wand2,
   ZoomIn,
@@ -33,7 +35,18 @@ import {
   type SeatSection,
 } from "@/lib/organizer";
 import { MIN_SEATS } from "@/lib/seatDetect";
-import { defaultSections, detectLayoutSeats, emptyLayout, newSeatUid, readPlanFile, renumber, sectionPalette } from "@/lib/seatLayout";
+import {
+  defaultSections,
+  cleanPlanImage,
+  detectLayoutSeats,
+  emptyLayout,
+  findStrayDots,
+  newSeatUid,
+  readPlanFile,
+  renumber,
+  sectionPalette,
+} from "@/lib/seatLayout";
+import { strayReasonLabel, type StrayReason } from "@/lib/strayDots";
 import { Dialog, Panel } from "../ui";
 import { useEventDraft } from "./EventDraft";
 import { Select } from "@/components/ui/Select";
@@ -183,6 +196,10 @@ export function ImageSeatMapBuilder() {
   const [confirm, setConfirm] = useState<"redetect" | "grid" | null>(null);
   const [rect, setRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [selMode, setSelMode] = useState<SelMode>("replace");
+  const [strays, setStrays] = useState<Map<string, StrayReason>>(new Map());
+  // The picture with text, letters and markers painted out (see cleanPlanImage). null until it is ready.
+  const [cleanUrl, setCleanUrl] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
   const [secName, setSecName] = useState("");
   const [secColor, setSecColor] = useState<string>(sectionPalette[1]!);
   const [secPrice, setSecPrice] = useState(30000);
@@ -207,6 +224,17 @@ export function ImageSeatMapBuilder() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [layout.width]);
+
+  // Look for dots that don't look like the rest (letters, markers, extra marks) whenever the seats change.
+  useEffect(() => {
+    let alive = true;
+    findStrayDots(layout.imageUrl, layout.seats)
+      .then((found) => alive && setStrays(found))
+      .catch(() => alive && setStrays(new Map()));
+    return () => {
+      alive = false;
+    };
+  }, [layout.imageUrl, layout.seats]);
 
   const snapshot = (): Snapshot => ({ layout, sections });
   const commit = (next: Partial<Snapshot>) => {
@@ -240,6 +268,17 @@ export function ImageSeatMapBuilder() {
     const rs = layout.seats.map((s) => s.r).sort((a, b) => a - b);
     return rs.length ? rs[rs.length >> 1]! : 9;
   }, [layout.seats]);
+
+  // Build the cleaned picture once per image and detection settings (not on every seat edit).
+  useEffect(() => {
+    let alive = true;
+    cleanPlanImage(layout.imageUrl, layout.settings, medianR * 2)
+      .then((url) => alive && setCleanUrl(url))
+      .catch(() => alive && setCleanUrl(null));
+    return () => {
+      alive = false;
+    };
+  }, [layout.imageUrl, layout.settings, medianR]);
 
   /* ---- pointer helpers ---- */
 
@@ -409,6 +448,20 @@ export function ImageSeatMapBuilder() {
   }
 
   const assignSelected = (id: string) => change((s) => ({ ...s, section: id }));
+
+  // Seats can be removed (undo, re-detect) after the check ran, so only count dots that still exist.
+  const strayList = layout.seats.filter((s) => strays.has(s.uid));
+  const strayReasons = [...new Set(strayList.map((s) => strayReasonLabel[strays.get(s.uid)!]))];
+  const showStrays = () => {
+    setTool("select");
+    setSelected(new Set(strayList.map((s) => s.uid)));
+  };
+  function removeStrays() {
+    if (!strayList.length) return;
+    const gone = new Set(strayList.map((s) => s.uid));
+    setSeats(layout.seats.filter((s) => !gone.has(s.uid)));
+    setSelected(new Set());
+  }
 
   /** Turns the selected seats into a new, named, coloured and priced section in one step. */
   function createSectionFromSelection() {
@@ -598,6 +651,14 @@ export function ImageSeatMapBuilder() {
               <Tool label={showImage ? "Hide the plan image" : "Show the plan image"} active={showImage} onClick={() => setShowImage((v) => !v)}>
                 {showImage ? <Eye size={16} /> : <EyeOff size={16} />}
               </Tool>
+              <Tool
+                label={showOriginal ? "Hide text and markers from the picture" : "Show text and markers from the picture"}
+                active={showOriginal}
+                disabled={!showImage}
+                onClick={() => setShowOriginal((v) => !v)}
+              >
+                <Layers size={16} />
+              </Tool>
               <Tool label="Show seat labels" active={showLabels} onClick={() => setShowLabels((v) => !v)}>
                 <Hash size={16} />
               </Tool>
@@ -644,7 +705,16 @@ export function ImageSeatMapBuilder() {
               aria-label="Seating plan. Use the tools above to select and edit seats."
             >
               <rect width={layout.width} height={layout.height} fill="#0b0907" />
-              {showImage && <image href={layout.imageUrl} width={layout.width} height={layout.height} opacity={0.55} />}
+              {/* Greyscale on purpose: the only colours on the chart should be the sections' colours. */}
+              {showImage && (
+                <image
+                  href={showOriginal || !cleanUrl ? layout.imageUrl : cleanUrl}
+                  width={layout.width}
+                  height={layout.height}
+                  opacity={0.4}
+                  style={{ filter: "grayscale(1)" }}
+                />
+              )}
 
               {layout.seats.map((s) => {
                 const sec = s.section ? sectionById.get(s.section) : undefined;
@@ -655,7 +725,7 @@ export function ImageSeatMapBuilder() {
                     onPointerDown={(e) => onSeatDown(e, s.uid)}
                     className={tool === "select" ? "cursor-pointer" : undefined}
                   >
-                    <title>{`${s.row}${s.num}${sec ? ` · ${sec.name}` : " · not assigned"}${s.blocked ? " · blocked" : ""}${s.accessible ? " · accessible" : ""}`}</title>
+                    <title>{`${s.row}${s.num}${sec ? ` · ${sec.name}` : " · not assigned"}${s.blocked ? " · blocked" : ""}${s.accessible ? " · accessible" : ""}${strays.has(s.uid) ? ` · may not be a seat: ${strayReasonLabel[strays.get(s.uid)!]}` : ""}`}</title>
                     <circle
                       cx={s.x}
                       cy={s.y}
@@ -675,6 +745,9 @@ export function ImageSeatMapBuilder() {
                         stroke="#7a756c"
                         strokeWidth={1.4}
                       />
+                    )}
+                    {strays.has(s.uid) && (
+                      <circle cx={s.x} cy={s.y} r={s.r * 1.55} fill="none" stroke="#fb923c" strokeWidth={1.6} strokeDasharray="3 2" />
                     )}
                     {isSel && <circle cx={s.x} cy={s.y} r={s.r * 1.3} fill="none" stroke="#fff" strokeWidth={2} />}
                     {showLabels && (
@@ -744,6 +817,28 @@ export function ImageSeatMapBuilder() {
 
         {/* ---- side panels ---- */}
         <div className="min-w-0 space-y-5">
+          {strayList.length > 0 && (
+            <Panel className="border-amber/50 p-5">
+              <h2 className="flex items-center gap-2 text-base font-bold text-text">
+                <TriangleAlert size={16} aria-hidden className="text-amber" /> Dots that may not be seats
+              </h2>
+              <p className="mt-2 text-xs leading-relaxed text-muted">
+                <strong className="text-text">{strayList.length}</strong> dot{strayList.length === 1 ? "" : "s"} (ringed in orange on the
+                plan) look different from the rest: {strayReasons.join(", ")}. They are often row letters, markers or text from your
+                picture.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Action onClick={showStrays}>Show them</Action>
+                <Action onClick={removeStrays} danger>
+                  <Trash2 size={14} aria-hidden /> Remove {strayList.length}
+                </Action>
+              </div>
+              <p className="mt-3 text-[11px] leading-relaxed text-dim">
+                Real seats in a different colour (for example a VIP row) can be flagged too. Use Show them to check before removing.
+              </p>
+            </Panel>
+          )}
+
           <Panel className="p-5">
             <h2 className="text-base font-bold text-text">Selection</h2>
             <p className="mt-1 text-[11px] text-dim" aria-live="polite">

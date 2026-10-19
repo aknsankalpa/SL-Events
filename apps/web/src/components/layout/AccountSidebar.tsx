@@ -4,35 +4,41 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, HelpCircle, History, LogOut, Ticket, User } from "lucide-react";
 import { currentUser } from "@/lib/data";
+import { signOut } from "@/lib/session";
+import { useSession } from "@/components/auth/useSession";
+import { useNotifications } from "@/components/notifications/useNotifications";
 
 const items = [
   { href: "/profile", label: "Profile", Icon: User },
   { href: "/my-tickets", label: "My tickets", Icon: Ticket },
   { href: "/booking-history", label: "Booking history", Icon: History },
-  { href: "/notifications", label: "Notifications", Icon: Bell, badge: 3 },
+  { href: "/notifications", label: "Notifications", Icon: Bell },
   { href: "/help", label: "Help & contact", Icon: HelpCircle },
 ];
 
 export function AccountSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useSession();
+  const { unread } = useNotifications();
 
   return (
     <aside className="rounded-xl border border-line bg-surface p-3 lg:sticky lg:top-[108px]">
       <div className="flex items-center gap-3 border-b border-line px-2 pb-4 pt-2">
         <span className="flex size-11 items-center justify-center rounded-full border border-gold/60 bg-surface-2 text-sm font-bold text-gold">
-          {currentUser.initials}
+          {user?.initials ?? currentUser.initials}
         </span>
         <div className="leading-tight">
-          <p className="text-sm font-bold text-text">{currentUser.fullName}</p>
+          <p className="truncate text-sm font-bold text-text">{user?.name ?? currentUser.fullName}</p>
           <p className="text-xs text-dim">Member since {currentUser.memberSinceShort}</p>
         </div>
       </div>
 
       <nav aria-label="Account" className="py-3">
         <ul className="space-y-1">
-          {items.map(({ href, label, Icon, badge }) => {
-            const active = pathname === href;
+          {items.map(({ href, label, Icon }) => {
+            const badge = href === "/notifications" && unread > 0 ? unread : undefined;
+            const active = pathname === href || (href === "/booking-history" && pathname.startsWith("/booking-history"));
             return (
               <li key={href}>
                 <Link
@@ -59,8 +65,11 @@ export function AccountSidebar() {
       <div className="border-t border-line pt-3">
         <button
           type="button"
-          // TODO: clear the session via the auth API.
-          onClick={() => router.push("/login")}
+          // TODO: end the session through the auth API.
+          onClick={() => {
+            signOut();
+            router.push("/");
+          }}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-bold text-danger transition-colors hover:bg-danger/10"
         >
           <LogOut size={16} aria-hidden /> Log out

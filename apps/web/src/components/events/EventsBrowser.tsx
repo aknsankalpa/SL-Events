@@ -2,31 +2,58 @@
 
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight, MapPin, Search } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, MapPin, Search, X } from "lucide-react";
 import { categories, citiesWithEvents, events, fromPrice, type CategoryId } from "@/lib/data";
 import { EventCard } from "./EventCard";
+import { DatePicker } from "@/components/ui/Pickers";
 import { Select } from "@/components/ui/Select";
+import { organizerBySlug, slugify, ticketsLeftTotal } from "@/lib/organizers";
 
 const PAGE_SIZE = 6;
 
-type Sort = "soonest" | "price-asc" | "price-desc";
-type DateRange = "any" | "this-month" | "next-month";
+type Sort = "soonest" | "popular" | "price-asc" | "price-desc";
+type DateRange = "any" | "week" | "weekend" | "this-month" | "next-month" | "pick";
 type Price = "any" | "free" | "paid";
 
 const sortOptions: { value: Sort; label: string }[] = [
   { value: "soonest", label: "Soonest first" },
+  { value: "popular", label: "Most popular" },
   { value: "price-asc", label: "Price: low to high" },
   { value: "price-desc", label: "Price: high to low" },
 ];
 
 const dateOptions: { value: DateRange; label: string }[] = [
   { value: "any", label: "Any time" },
+  { value: "week", label: "Next 7 days" },
+  { value: "weekend", label: "This weekend" },
   { value: "this-month", label: "This month" },
   { value: "next-month", label: "Next month" },
+  { value: "pick", label: "Pick a date…" },
 ];
 
-function inRange(iso: string, range: DateRange, now: Date) {
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const soldOf = (e: (typeof events)[number]) => e.ticketTypes.reduce((n, t) => n + t.sold, 0);
+
+function inRange(iso: string, range: DateRange, now: Date, picked: string) {
   if (range === "any") return true;
+  // Events are in Korea time, and the date part of the stored string is the Korean calendar date.
+  const day = iso.slice(0, 10);
+  if (range === "pick") return !picked || day === picked;
+  if (range === "week") {
+    const end = new Date(now);
+    end.setDate(end.getDate() + 7);
+    return day >= ymd(now) && day <= ymd(end);
+  }
+  if (range === "weekend") {
+    const sat = new Date(now);
+    sat.setDate(sat.getDate() + ((6 - sat.getDay() + 7) % 7));
+    const sun = new Date(sat);
+    sun.setDate(sat.getDate() + 1);
+    // On a Sunday the weekend is already under way: today still counts.
+    const from = now.getDay() === 0 ? ymd(now) : ymd(sat);
+    const to = now.getDay() === 0 ? ymd(now) : ymd(sun);
+    return day >= from && day <= to;
+  }
   const d = new Date(iso);
   const offset = range === "this-month" ? 0 : 1;
   const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
@@ -42,7 +69,10 @@ export function EventsBrowser() {
     initialCategory && categories.some((c) => c.id === initialCategory) ? [initialCategory] : [],
   );
   const [city, setCity] = useState(params.get("city") ?? "");
+  const [organizer, setOrganizer] = useState(params.get("organizer") ?? "");
+  const [available, setAvailable] = useState(false);
   const [date, setDate] = useState<DateRange>("any");
+  const [pickedDate, setPickedDate] = useState("");
   const [price, setPrice] = useState<Price>("any");
   const [sort, setSort] = useState<Sort>("soonest");
   const [page, setPage] = useState(1);
@@ -54,7 +84,9 @@ export function EventsBrowser() {
       if (q && !`${e.title} ${e.venue} ${e.city} ${e.organizer}`.toLowerCase().includes(q)) return false;
       if (selected.length && !selected.includes(e.category)) return false;
       if (city && e.city !== city) return false;
-      if (!inRange(e.startsAt, date, now)) return false;
+      if (organizer && slugify(e.organizer) !== organizer) return false;
+      if (available && ticketsLeftTotal(e) === 0) return false;
+      if (!inRange(e.startsAt, date, now, pickedDate)) return false;
       const p = fromPrice(e);
       if (price === "free" && p !== 0) return false;
       if (price === "paid" && p === 0) return false;
@@ -63,9 +95,10 @@ export function EventsBrowser() {
     return [...list].sort((a, b) => {
       if (sort === "price-asc") return fromPrice(a) - fromPrice(b);
       if (sort === "price-desc") return fromPrice(b) - fromPrice(a);
+      if (sort === "popular") return soldOf(b) - soldOf(a);
       return a.startsAt.localeCompare(b.startsAt);
     });
-  }, [query, selected, city, date, price, sort]);
+  }, [query, selected, city, organizer, available, date, pickedDate, price, sort]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -73,13 +106,16 @@ export function EventsBrowser() {
   const from = filtered.length === 0 ? 0 : (current - 1) * PAGE_SIZE + 1;
   const to = (current - 1) * PAGE_SIZE + visible.length;
 
-  const dirty = query !== "" || selected.length > 0 || city !== "" || date !== "any" || price !== "any";
+  const dirty = query !== "" || selected.length > 0 || city !== "" || organizer !== "" || available || date !== "any" || price !== "any";
 
   function clearAll() {
     setQuery("");
     setSelected([]);
     setCity("");
+    setOrganizer("");
+    setAvailable(false);
     setDate("any");
+    setPickedDate("");
     setPrice("any");
     setPage(1);
   }
@@ -162,6 +198,25 @@ export function EventsBrowser() {
               </option>
             ))}
           </SelectBox>
+          {date === "pick" && (
+            <DatePicker
+              value={pickedDate}
+              onChange={(e) => reset(setPickedDate)(e.target.value)}
+              placeholder="Choose a day"
+              aria-label="Event day"
+              className="-mt-2 h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text focus:border-gold focus:outline-none"
+            />
+          )}
+
+          <label className="flex cursor-pointer items-center gap-3 text-[13px] text-text">
+            <input
+              type="checkbox"
+              checked={available}
+              onChange={(e) => reset(setAvailable)(e.target.checked)}
+              className="checkbox-box size-4 shrink-0 cursor-pointer appearance-none rounded border border-line bg-surface-2 checked:border-amber checked:bg-amber focus-visible:focus-ring"
+            />
+            Only events with tickets left
+          </label>
 
           <fieldset>
             <legend className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted">Price</legend>
@@ -188,10 +243,20 @@ export function EventsBrowser() {
 
       <section aria-label="Events">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-text">
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-text">
             <strong className="font-bold">
               {filtered.length} event{filtered.length === 1 ? "" : "s"}
             </strong>
+            {organizer && (
+              <button
+                type="button"
+                onClick={() => reset(setOrganizer)("")}
+                className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-bold text-gold hover:bg-gold/20"
+              >
+                By {organizerBySlug(organizer)?.name ?? organizer} <X size={12} aria-hidden />
+                <span className="sr-only">Remove organizer filter</span>
+              </button>
+            )}
             {filtered.length > 0 && (
               <span className="ml-3 text-xs text-dim">
                 Showing {from}–{to}
@@ -225,7 +290,7 @@ export function EventsBrowser() {
         ) : (
           <div className="rounded-xl border border-line bg-surface p-10 text-center">
             <p className="text-base font-bold text-text">No events match your filters</p>
-            <p className="mt-2 text-sm text-muted">Try a different city or clear the filters.</p>
+            <p className="mt-2 text-sm text-muted">Try a different location or date, or clear the filters.</p>
           </div>
         )}
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Check, CheckCircle2, Maximize2, ShieldCheck, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { bookingStore, staffActions } from "@/lib/bookingStore";
+import type { Booking } from "@/lib/bookings";
 import { formatKrw } from "@/lib/format";
 import { rejectReasons, verifyQueue, type QueueItem } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
@@ -19,21 +21,44 @@ const sorts: { value: Sort; label: string }[] = [
 
 const VISIBLE = 5;
 
+/** A customer's uploaded proof, shown to the organizer as a payment to check. */
+const toQueueItem = (b: Booking): QueueItem => ({
+  id: b.id,
+  buyer: b.attendees[0] || b.ownerEmail,
+  booking: b.id,
+  amount: b.total,
+  waited: "just now",
+  tickets: b.lines.map((l) => `${l.qty} × ${l.ticketName}`).join(", "),
+  event: b.eventTitle,
+  file: b.proof?.fileName ?? "receipt",
+  uploaded: b.proof?.uploadedAt ?? "just now",
+  receiptDate: "—",
+  senderName: (b.proof?.sender ?? "").toUpperCase(),
+  transferTime: b.proof?.bank ? `Sent from ${b.proof.bank}` : "Within the 24-hour hold",
+});
+
 export function VerifyPayments() {
   const { pending, resolveOnePending } = useOrganizer();
   const [queue, setQueue] = useState<QueueItem[]>(verifyQueue);
+  // Proofs that customers sent from this browser join the queue. Approving one here is the only way a booking becomes paid.
+  const stored = useSyncExternalStore(bookingStore.subscribe, bookingStore.getSnapshot, bookingStore.getServerSnapshot);
+  const live = useMemo(
+    () => stored.filter((b) => b.status === "under_review" && b.proof && !queue.some((q) => q.id === b.id)).map(toQueueItem),
+    [stored, queue],
+  );
+  const all = useMemo(() => [...live, ...queue], [live, queue]);
   const [sort, setSort] = useState<Sort>("oldest");
   const [selectedId, setSelectedId] = useState(verifyQueue[0]!.id);
   const [toast, setToast] = useState<string>();
 
   const ordered = useMemo(() => {
-    const list = [...queue];
+    const list = [...all];
     if (sort === "newest") list.reverse();
     if (sort === "amount") list.sort((a, b) => b.amount - a.amount);
     return list;
-  }, [queue, sort]);
+  }, [all, sort]);
 
-  const selected = queue.find((q) => q.id === selectedId) ?? ordered[0];
+  const selected = all.find((q) => q.id === selectedId) ?? ordered[0];
 
   useEffect(() => {
     if (!toast) return;
@@ -49,7 +74,7 @@ export function VerifyPayments() {
     setToast(message);
   }
 
-  const more = Math.max(0, pending - Math.min(queue.length, VISIBLE));
+  const more = Math.max(0, pending + live.length - Math.min(all.length, VISIBLE));
 
   return (
     <>
@@ -59,7 +84,7 @@ export function VerifyPayments() {
         actions={
           <p className="flex items-center gap-2 text-xs text-muted">
             <span className="size-2 rounded-full bg-amber" aria-hidden />
-            {pending} waiting · oldest {queue[0]?.waited.replace(" ago", "") ?? "—"}
+            {pending + live.length} waiting · oldest {all[0]?.waited.replace(" ago", "") ?? "—"}
           </p>
         }
       />
@@ -130,8 +155,15 @@ export function VerifyPayments() {
           <ReviewPane
             key={selected.id}
             item={selected}
-            onApprove={() => resolve(selected, `Approved ${selected.booking}. Tickets are being sent to ${selected.buyer}.`)}
-            onReject={() => resolve(selected, `Rejected ${selected.booking}. ${selected.buyer} will be asked for a new screenshot.`)}
+            onApprove={() => {
+              // TODO: the API records who verified the payment. For a customer's booking this issues the QR tickets.
+              staffActions.confirmPayment(selected.booking, "Organizer payments team");
+              resolve(selected, `Approved ${selected.booking}. Tickets are being sent to ${selected.buyer}.`);
+            }}
+            onReject={(reason) => {
+              staffActions.rejectProof(selected.booking, reason);
+              resolve(selected, `Rejected ${selected.booking}. ${selected.buyer} will be asked for a new screenshot.`);
+            }}
           />
         </div>
       )}
@@ -140,7 +172,7 @@ export function VerifyPayments() {
 }
 
 /** Receipt viewer and decision form. Keyed by booking so each receipt starts from a clean form and zoom. */
-function ReviewPane({ item, onApprove, onReject }: { item: QueueItem; onApprove: () => void; onReject: () => void }) {
+function ReviewPane({ item, onApprove, onReject }: { item: QueueItem; onApprove: () => void; onReject: (reason: string) => void }) {
   const [checked, setChecked] = useState(false);
   const [reason, setReason] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -234,7 +266,7 @@ function ReviewPane({ item, onApprove, onReject }: { item: QueueItem; onApprove:
             variant="outline"
             size="lg"
             disabled={!reason}
-            onClick={onReject}
+            onClick={() => onReject(reason)}
             className="mt-3 w-full border-danger/60 text-danger hover:bg-danger/10"
           >
             Reject and ask for new proof

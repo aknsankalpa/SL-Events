@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { Landmark, QrCode, Ticket, Upload } from "lucide-react";
 import { CategoryIcon } from "@/components/events/CategoryIcon";
-import { ActionBanner, Hero } from "@/components/home/Hero";
+import { CustomerHome } from "@/components/home/CustomerHome";
 import { EventsNearYou } from "@/components/home/EventsNearYou";
+import { HomeIntro } from "@/components/home/HomeIntro";
+import { ExploreBanner, FeaturedEvents, PopularOrganizers } from "@/components/home/HomeSections";
 import { categories } from "@/lib/data";
 
 const steps = [
   { n: "01", title: "Choose tickets", body: "Pick an event, a ticket type and how many you need.", Icon: Ticket },
-  { n: "02", title: "Pay by transfer", body: "Send the amount from any Korean bank, Toss or KakaoPay.", Icon: Landmark },
+  { n: "02", title: "Pay by transfer", body: "Send the amount by bank transfer from your banking app.", Icon: Landmark },
   { n: "03", title: "Upload proof", body: "Add a screenshot of your transfer. We check it within hours.", Icon: Upload },
   { n: "04", title: "Get your QR", body: "Your QR ticket appears in My tickets. Show it at the door.", Icon: QrCode },
 ];
@@ -15,10 +17,12 @@ const steps = [
 export default function HomePage() {
   return (
     <>
-      <ActionBanner />
-      <Hero />
+      <HomeIntro />
 
-      <section id="categories" className="mx-auto max-w-site px-5 py-16">
+      {/* Signed-in customers only: their tickets and recommendations. Renders nothing for visitors. */}
+      <CustomerHome />
+
+      <section id="categories" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-widest text-amber">Explore</p>
@@ -44,7 +48,11 @@ export default function HomePage() {
         </ul>
       </section>
 
+      <FeaturedEvents />
+
       <EventsNearYou />
+
+      <PopularOrganizers />
 
       <section className="mx-auto max-w-site px-5 py-16">
         <p className="mb-2 text-xs font-bold uppercase tracking-widest text-amber">How booking works</p>
@@ -65,6 +73,8 @@ export default function HomePage() {
           ))}
         </ol>
       </section>
+
+      <ExploreBanner />
     </>
   );
 }

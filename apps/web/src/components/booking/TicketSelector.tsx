@@ -66,6 +66,11 @@ export function TicketSelector({ event }: { event: EventItem }) {
                     {!soldOut && left <= 10 && <Badge tone="danger">{left} left</Badge>}
                   </div>
                   <p className="mt-2 text-xl font-bold text-text">{formatKrw(t.price)}</p>
+                  {!soldOut && (
+                    <p className="mt-1 text-[11px] text-dim">
+                      {t.price === 0 ? "Free" : "per ticket"} · up to {Math.min(left, MAX_TICKETS)} per booking
+                    </p>
+                  )}
                 </div>
 
                 {soldOut ? (
@@ -121,8 +126,14 @@ export function TicketSelector({ event }: { event: EventItem }) {
           );
         })}
 
-        <p className="flex items-center gap-2 text-xs text-dim">
-          <Info size={14} aria-hidden /> Up to {MAX_TICKETS} tickets per booking. Children under 5 enter free with an adult.
+        <p
+          role={total >= MAX_TICKETS ? "alert" : undefined}
+          className={`flex items-center gap-2 text-xs ${total >= MAX_TICKETS ? "font-bold text-amber" : "text-dim"}`}
+        >
+          <Info size={14} aria-hidden />
+          {total >= MAX_TICKETS
+            ? `You've reached the limit of ${MAX_TICKETS} tickets per booking.`
+            : `Up to ${MAX_TICKETS} tickets per booking in total. There is no booking fee at the moment.`}
         </p>
       </div>
 

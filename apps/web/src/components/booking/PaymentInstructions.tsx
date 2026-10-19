@@ -8,6 +8,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/StatusBadge";
 import type { Booking } from "@/lib/bookings";
+import { customerActions } from "@/lib/bookingStore";
 import { paymentAccount, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 
@@ -57,6 +58,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
 export function PaymentInstructions({ booking, event }: { booking: Booking; event: EventItem }) {
   const router = useRouter();
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const left = useCountdown(booking.payByIso);
   const amount = formatKrw(booking.total);
 
@@ -104,7 +106,7 @@ export function PaymentInstructions({ booking, event }: { booking: Booking; even
           <h2 className="mb-5 text-lg font-bold text-text">How to pay</h2>
           <ol className="space-y-5">
             {[
-              ["Open your bank app, Toss or KakaoPay", "Any Korean bank account works."],
+              ["Open your banking app", "Any bank account or app that can make a transfer works."],
               [`Send exactly ${amount} to the account above`, "A different amount slows down checking."],
               [`Write ${booking.id} in the memo`, "This is how we match your payment to your booking."],
               ["Take a screenshot of the completed transfer", "You will upload it on the next step."],
@@ -133,14 +135,34 @@ export function PaymentInstructions({ booking, event }: { booking: Booking; even
           <LinkButton href={`/bookings/${booking.id}/proof`} size="lg" className="w-full">
             <Upload size={16} aria-hidden /> I&apos;ve paid, upload proof
           </LinkButton>
-          <Button
-            variant="ghost"
-            className="mt-2 w-full"
-            // TODO: call the cancel-booking API, which releases the held seats.
-            onClick={() => router.push("/my-tickets")}
-          >
-            Cancel booking
-          </Button>
+          {confirmCancel ? (
+            <div role="alert" className="mt-3 rounded-lg border border-line bg-surface-2 p-4">
+              <p className="text-xs leading-relaxed text-muted">
+                Cancel this booking? The tickets go back on sale and you can&apos;t get them back. Only cancel if you haven&apos;t sent
+                any money.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmCancel(false)}>
+                  Keep booking
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  // TODO: call the cancel-booking API, which releases the held tickets.
+                  onClick={() => {
+                    customerActions.cancelBooking(booking.id);
+                    router.push(`/bookings/${booking.id}`);
+                  }}
+                >
+                  Yes, cancel booking
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="ghost" className="mt-2 w-full" onClick={() => setConfirmCancel(true)}>
+              Cancel booking
+            </Button>
+          )}
         </OrderSummary>
 
         <Card className="p-5">

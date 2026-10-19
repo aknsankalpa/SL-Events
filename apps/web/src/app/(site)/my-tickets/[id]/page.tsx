@@ -1,37 +1,18 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
-import { TicketViewer } from "@/components/tickets/TicketViewer";
-import { Breadcrumbs } from "@/components/ui/PageHeader";
-import { bookingEvent, bookings, getBooking, issuedTickets, type IssuedTicket } from "@/lib/bookings";
-
-type Props = { params: Promise<{ id: string }> };
+import { Suspense } from "react";
+import { TicketsScreen } from "@/components/booking/screens";
 
 export const metadata: Metadata = { title: "QR tickets" };
 
-export function generateStaticParams() {
-  return bookings.filter((b) => b.eventSlug).map((b) => ({ id: b.id }));
-}
-
-/** Placeholder codes for confirmed bookings without issued tickets in the mock data. */
-function fallbackTickets(names: string[], ticketName: string, id: string): IssuedTicket[] {
-  return names.map((holder, i) => ({ code: `SLE-${id.slice(-4)}-${String(i + 1).padStart(4, "0")}`, holder, ticketName, scanned: false }));
-}
-
-export default async function QrTicketPage({ params }: Props) {
+async function Screen({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const booking = getBooking(id);
-  const event = booking && bookingEvent(booking);
-  if (!booking || !event) notFound();
-  if (booking.status !== "confirmed") redirect(`/my-tickets/${id}/status`);
+  return <TicketsScreen id={id} />;
+}
 
-  const tickets = issuedTickets[id] ?? fallbackTickets(booking.attendees, booking.lines[0]!.ticketName, id);
-
+export default function Page({ params }: { params: Promise<{ id: string }> }) {
   return (
-    <>
-      <div className="mx-auto max-w-site px-5 pt-6">
-        <Breadcrumbs crumbs={[{ label: "My tickets", href: "/my-tickets" }, { label: event.title }]} />
-      </div>
-      <TicketViewer event={event} bookingId={booking.id} tickets={tickets} />
-    </>
+    <Suspense fallback={<div className="h-64" aria-hidden />}>
+      <Screen params={params} />
+    </Suspense>
   );
 }

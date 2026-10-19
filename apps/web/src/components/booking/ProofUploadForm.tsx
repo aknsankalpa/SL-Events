@@ -5,9 +5,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Calendar, CheckCircle2, Clock, FileText, UploadCloud, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, EventThumb } from "@/components/ui/Card";
-import { Field, SelectField } from "@/components/ui/Field";
+import { Field } from "@/components/ui/Field";
 import type { Booking } from "@/lib/bookings";
-import { banks, currentUser, type EventItem } from "@/lib/data";
+import { customerActions } from "@/lib/bookingStore";
+import { useSession } from "@/components/auth/useSession";
+import { useOnline } from "@/components/layout/OfflineBanner";
+import { currentUser, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -23,7 +26,9 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
   const [fileError, setFileError] = useState<string>();
   const [dragging, setDragging] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [sender, setSender] = useState(currentUser.fullName.toUpperCase());
+  const { user } = useSession();
+  const online = useOnline();
+  const [sender, setSender] = useState((user?.name ?? currentUser.fullName).toUpperCase());
 
   // Simulated progress: the real upload to storage is wired up once the API exists.
   useEffect(() => {
@@ -51,8 +56,16 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
     e.preventDefault();
     setSubmitted(true);
     if (!upload || upload.progress < 100 || !sender.trim()) return;
-    // TODO: send the receipt and transfer details to the API.
-    router.push(`/my-tickets/${booking.id}/submitted`);
+    const bank = String(new FormData(e.currentTarget).get("bank") ?? "").trim();
+    // TODO: upload the receipt to storage and send the details to the API. The booking only becomes "under review":
+    // it is marked paid when staff have checked the transfer, never from here.
+    const ok = customerActions.submitProof(booking.id, {
+      fileName: upload.file.name,
+      sizeLabel: `${(upload.file.size / 1024 / 1024).toFixed(1)} MB`,
+      sender: sender.trim(),
+      bank,
+    });
+    router.push(ok ? `/bookings/${booking.id}?submitted=1` : `/bookings/${booking.id}`);
   }
 
   const size = upload ? `${(upload.file.size / 1024 / 1024).toFixed(1)} MB` : "";
@@ -140,21 +153,15 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
               name="sender"
               value={sender}
               onChange={(e) => setSender(e.target.value)}
-              hint="Usually in capital letters for foreign residents."
+              hint="Exactly as it appears in your banking app."
               error={submitted && !sender.trim() ? "Enter the name on the sending account." : undefined}
             />
-            <SelectField label="Bank you sent from" name="bank" defaultValue="Shinhan Bank">
-              {banks.map((b) => (
-                <option key={b} value={b} className="bg-surface">
-                  {b}
-                </option>
-              ))}
-            </SelectField>
+            <Field label="Bank or app you sent from (optional)" name="bank" placeholder="For example, the name of your bank" />
           </div>
 
           <div className="mt-5 grid gap-5 sm:grid-cols-3">
-            <Field label="Transfer date" name="date" type="date" defaultValue="2026-10-09" icon={<Calendar />} />
-            <Field label="Transfer time" name="time" type="time" defaultValue="13:22" icon={<Clock />} />
+            <Field label="Transfer date (optional)" name="date" type="date" icon={<Calendar />} />
+            <Field label="Transfer time (optional)" name="time" type="time" icon={<Clock />} />
             <Field label="Amount sent" name="amount" defaultValue={formatKrw(booking.total)} inputMode="numeric" />
           </div>
 
@@ -195,9 +202,10 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
             <span className="text-[13px] text-muted">Amount due</span>
             <span className="text-2xl font-bold text-text">{formatKrw(booking.total)}</span>
           </div>
-          <Button type="submit" size="lg" className="mt-5 w-full" disabled={!!upload && upload.progress < 100}>
+          <Button type="submit" size="lg" className="mt-5 w-full" disabled={(!!upload && upload.progress < 100) || !online}>
             Submit proof
           </Button>
+          {!online && <p role="alert" className="mt-3 text-center text-[11px] text-amber">You&apos;re offline. Reconnect to send your proof.</p>}
           <p className="mt-3 text-center text-[11px] text-dim">We usually check payments within 2–6 hours.</p>
         </Card>
 
@@ -208,7 +216,7 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
               <span className="mx-auto mb-1 flex size-5 items-center justify-center rounded-full bg-blue-500 text-[10px] text-white">✓</span>
               <p className="text-[11px] font-bold text-slate-900">{formatKrw(booking.total)}</p>
               <p className="mb-1">Transfer complete</p>
-              {["To · SL Events", "Bank · KB Kookmin", `Memo · ${booking.id}`, "Date · 2026.10.09"].map((r) => (
+              {["To · SL Events", `Memo · ${booking.id}`, "Status · Completed"].map((r) => (
                 <p key={r} className="border-t border-slate-200 py-0.5 text-left">
                   {r}
                 </p>
