@@ -8,6 +8,14 @@
  *   const store = createPersistedStore("key", seed, normalize);
  *   const value = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
  */
+/**
+ * Where saved values live. The website uses the browser's localStorage; the mobile app (apps/mobile) installs its own
+ * synchronous storage here before any store is read, so both apps share these stores and the rules built on them.
+ */
+export type SyncStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void };
+export const storage: { current: SyncStorage | null } = { current: null };
+const backing = (): SyncStorage => storage.current ?? window.localStorage;
+
 export function createPersistedStore<T>(key: string, fallback: T, normalize?: (stored: unknown) => T) {
   let cache: T = fallback;
   let loaded = false;
@@ -15,7 +23,7 @@ export function createPersistedStore<T>(key: string, fallback: T, normalize?: (s
 
   function read(): T {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = backing().getItem(key);
       if (!raw) return fallback;
       const parsed: unknown = JSON.parse(raw);
       return normalize ? normalize(parsed) : (parsed as T);
@@ -55,7 +63,7 @@ export function createPersistedStore<T>(key: string, fallback: T, normalize?: (s
       cache = next;
       loaded = true;
       try {
-        window.localStorage.setItem(key, JSON.stringify(next));
+        backing().setItem(key, JSON.stringify(next));
       } catch {
         /* storage full or blocked: the in-memory value still serves this session */
       }

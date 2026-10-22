@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "SL Events",
+    "slug": "sl-events",
+    "scheme": "slevents",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0907",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "kr.slevents.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "kr.slevents.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0907",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b0907"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SL Events uses the camera to scan ticket QR codes at the door.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SL Events needs your photos so you can upload a screenshot of your bank transfer.",
+          "cameraPermission": "SL Events needs the camera so you can photograph your bank transfer receipt."
+        }
+      ],
+      "expo-splash-screen"
+    ]
+  }
+}

@@ -8,6 +8,9 @@
     "start": "npm --prefix apps/web run start",
     "lint": "npm --prefix apps/web run lint",
     "typecheck": "npm --prefix apps/web exec -- tsc --noEmit",
-    "install:web": "npm --prefix apps/web install"
+    "install:web": "npm --prefix apps/web install",
+    "mobile": "npm --prefix apps/mobile run start",
+    "typecheck:mobile": "npm --prefix apps/mobile run typecheck",
+    "install:mobile": "npm --prefix apps/mobile install"
   }
 }
