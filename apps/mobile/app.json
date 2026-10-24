@@ -54,8 +54,7 @@
           "photosPermission": "SL Events needs your photos so you can upload a screenshot of your bank transfer.",
           "cameraPermission": "SL Events needs the camera so you can photograph your bank transfer receipt."
         }
-      ],
-      "expo-splash-screen"
+      ]
     ]
   }
 }

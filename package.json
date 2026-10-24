@@ -11,6 +11,8 @@
     "install:web": "npm --prefix apps/web install",
     "mobile": "npm --prefix apps/mobile run start",
     "typecheck:mobile": "npm --prefix apps/mobile run typecheck",
-    "install:mobile": "npm --prefix apps/mobile install"
+    "install:mobile": "npm --prefix apps/mobile install",
+    "mobile:web": "npm --prefix apps/mobile run web",
+    "mobile:clear": "npm --prefix apps/mobile run start -- -c"
   }
 }

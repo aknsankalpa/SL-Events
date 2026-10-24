@@ -53,10 +53,12 @@ export function createPersistedStore<T>(key: string, fallback: T, normalize?: (s
           listener();
         }
       };
-      window.addEventListener("storage", onStorage);
+      // Browsers tell other open tabs when a value changes. The mobile app has no such event, and no second tab.
+      const canListen = typeof window !== "undefined" && typeof window.addEventListener === "function";
+      if (canListen) window.addEventListener("storage", onStorage);
       return () => {
         listeners.delete(listener);
-        window.removeEventListener("storage", onStorage);
+        if (canListen) window.removeEventListener("storage", onStorage);
       };
     },
     set(next: T) {

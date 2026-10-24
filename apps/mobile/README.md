@@ -16,6 +16,21 @@ npm run typecheck
 
 Demo sign-in: any valid email and password works. `kasun@example.com` has sample bookings (paid, unpaid, under review, failed, expired, attended).
 
+## Roles in the one app
+
+One app serves everyone. What a person sees depends on who is signed in (`src/lib/roles.ts`):
+
+| Who | How they get in | What they see |
+|---|---|---|
+| Visitor (not registered) | Nothing to do | Public events, event pages, help. Booking asks them to log in or register |
+| Customer | Register, or log in | Customer tabs: home, events, tickets, alerts, profile |
+| Door staff | `/staff/login`, with the account an organizer invited | `app/staff/*`: assigned events, QR scanner, attendance summary, result screens (from the Figma staff designs) |
+| Organizer, admin | Not built yet | |
+
+Roles are a demo list for now (`staffAccounts`): `ishara@slevents.kr` is door staff for Lanka Beats Korea; any other email is a customer. A staff account that signs in anywhere goes to the staff area and never sees the customer tabs; anyone else who opens `/staff` is sent to the staff sign-in. When the backend exists the role comes from the server and every scan is checked there.
+
+Try the staff app: sign in at `/staff/login` as `ishara@slevents.kr` (any password), tap Start scanning, then **Type code** to try the demo codes, one per result screen. The Account screen has a switch to pretend there is no connection.
+
 ## How it shares code with the website
 
 The booking rules, mock data and stores are **not copied**. They live in `apps/web/src/lib` and the app imports them as `@core/*` (see `metro.config.js` and `tsconfig.json`). So a change to the payment rules, ticket rules or sample data reaches the website and the app together. The pieces:

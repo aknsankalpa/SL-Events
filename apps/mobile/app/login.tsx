@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { safeNext, signIn } from "@core/session";
+import { homeFor } from "@/lib/roles";
 import { AuthShell } from "@/ui/AuthShell";
 import { Button } from "@/ui/Button";
 import { Field } from "@/ui/Field";
@@ -23,7 +24,9 @@ export default function Login() {
     if (Object.keys(found).length) return;
     // TODO: check the password with the auth API; for now any valid email and password signs in.
     const user = signIn(email.trim());
-    if (user.verified) router.replace(target as never);
+    // Door staff go to their own area whatever page they came from.
+    if (homeFor(user.email) === "/staff") router.replace("/staff");
+    else if (user.verified) router.replace(target as never);
     else router.replace({ pathname: "/verify", params: { email: user.email, next: target } });
   }
 
@@ -42,6 +45,9 @@ export default function Login() {
         <Text color={colors.gold} bold onPress={() => router.replace({ pathname: "/register", params: { next: target } })} accessibilityRole="link">
           Create an account
         </Text>
+      </Text>
+      <Text variant="small" color={colors.gold} bold center onPress={() => router.push("/staff/login")} accessibilityRole="link">
+        Event staff? Sign in here
       </Text>
       <Text variant="small" color={colors.dim} center>
         Demo: any valid email and password works. kasun@example.com has sample bookings.

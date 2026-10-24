@@ -4,7 +4,7 @@ import { colors, fonts } from "@/theme";
 type Variant = "display" | "title" | "heading" | "body" | "small" | "caption" | "label";
 
 const variants: Record<Variant, TextStyle> = {
-  display: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, textTransform: "uppercase", letterSpacing: 0.5 },
+  display: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, letterSpacing: 0.5 },
   title: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28 },
   heading: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 22 },
   body: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21 },

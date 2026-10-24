@@ -56,6 +56,8 @@ export default function Profile() {
         <SignInPrompt icon="person-outline" title="Log in to your account" body="Keep your tickets, bookings and details in one place." />
         <Card>
           <MenuRow icon="help-circle-outline" label="Help and FAQ" sub="Payments, tickets, contact" onPress={() => router.push("/help")} />
+          <View style={{ height: 1, backgroundColor: colors.line }} />
+          <MenuRow icon="id-card-outline" label="Event staff sign in" sub="For door staff invited by an organizer" onPress={() => router.push("/staff/login")} />
         </Card>
       </Screen>
     );

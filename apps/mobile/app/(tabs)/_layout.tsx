@@ -1,8 +1,9 @@
 import type { ColorValue } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { bookingNotifications, staticNotifications } from "@core/notifications";
-import { useBookings, useReadNotifications } from "@/lib/hooks";
+import { useBookings, useReadNotifications, useSession } from "@/lib/hooks";
+import { staffFor } from "@/lib/roles";
 import { colors, fonts } from "@/theme";
 
 type Icon = keyof typeof Ionicons.glyphMap;
@@ -15,7 +16,11 @@ const icon = (active: Icon, idle: Icon) =>
 export default function TabsLayout() {
   const bookings = useBookings();
   const read = useReadNotifications();
+  const user = useSession();
   const unread = [...bookingNotifications(bookings), ...staticNotifications].filter((n) => !read.includes(n.id)).length;
+
+  // Door staff have their own app area; a signed-in staff account never lands on the customer tabs.
+  if (staffFor(user?.email)) return <Redirect href="/staff" />;
 
   return (
     <Tabs
