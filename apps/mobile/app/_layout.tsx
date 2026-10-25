@@ -40,6 +40,8 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="staff" options={{ headerShown: false }} />
+        <Stack.Screen name="organizer" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ title: "Log in" }} />
         <Stack.Screen name="register" options={{ title: "Create account" }} />
         <Stack.Screen name="verify" options={{ title: "Verify email" }} />

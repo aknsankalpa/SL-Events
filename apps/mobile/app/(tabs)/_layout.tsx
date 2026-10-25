@@ -3,7 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 import { bookingNotifications, staticNotifications } from "@core/notifications";
 import { useBookings, useReadNotifications, useSession } from "@/lib/hooks";
-import { staffFor } from "@/lib/roles";
+import { homeForRole } from "@/lib/roles";
+import { useView } from "@/lib/view";
 import { colors, fonts } from "@/theme";
 
 type Icon = keyof typeof Ionicons.glyphMap;
@@ -19,8 +20,10 @@ export default function TabsLayout() {
   const user = useSession();
   const unread = [...bookingNotifications(bookings), ...staticNotifications].filter((n) => !read.includes(n.id)).length;
 
-  // Door staff have their own app area; a signed-in staff account never lands on the customer tabs.
-  if (staffFor(user?.email)) return <Redirect href="/staff" />;
+  // Staff, organizers and admins have their own areas. The customer tabs show only for customers, or for an account
+  // that switched to its customer view.
+  const view = useView(user?.email);
+  if (user && view !== "customer") return <Redirect href={homeForRole(view)} />;
 
   return (
     <Tabs

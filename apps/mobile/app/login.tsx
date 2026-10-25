@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { safeNext, signIn } from "@core/session";
-import { homeFor } from "@/lib/roles";
+import { homeFor } from "@/lib/view";
 import { AuthShell } from "@/ui/AuthShell";
 import { Button } from "@/ui/Button";
 import { Field } from "@/ui/Field";
@@ -24,8 +24,9 @@ export default function Login() {
     if (Object.keys(found).length) return;
     // TODO: check the password with the auth API; for now any valid email and password signs in.
     const user = signIn(email.trim());
-    // Door staff go to their own area whatever page they came from.
-    if (homeFor(user.email) === "/staff") router.replace("/staff");
+    // Staff, organizers and admins go to their own area whatever page they came from.
+    const home = homeFor(user.email);
+    if (home !== "/") router.replace(home);
     else if (user.verified) router.replace(target as never);
     else router.replace({ pathname: "/verify", params: { email: user.email, next: target } });
   }

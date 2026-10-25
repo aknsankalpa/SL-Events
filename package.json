@@ -13,6 +13,7 @@
     "typecheck:mobile": "npm --prefix apps/mobile run typecheck",
     "install:mobile": "npm --prefix apps/mobile install",
     "mobile:web": "npm --prefix apps/mobile run web",
-    "mobile:clear": "npm --prefix apps/mobile run start -- -c"
+    "mobile:clear": "npm --prefix apps/mobile run start -- -c",
+    "mobile:lan": "node scripts/mobile-lan.mjs"
   }
 }

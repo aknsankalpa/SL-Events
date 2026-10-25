@@ -6,6 +6,8 @@ import { deleteAccount, signOut, updateProfile } from "@core/session";
 import { historyTotals } from "@core/bookings";
 import { formatKrw } from "@core/format";
 import { useBookings, useSession } from "@/lib/hooks";
+import { homeForRole, roleLabels, rolesFor } from "@/lib/roles";
+import { setView } from "@/lib/view";
 import { Button } from "@/ui/Button";
 import { Card } from "@/ui/Card";
 import { Field } from "@/ui/Field";
@@ -64,6 +66,8 @@ export default function Profile() {
   }
 
   const totals = historyTotals(bookings);
+  // An organizer or admin account that is using the customer view can go back to its own area from here.
+  const otherRole = rolesFor(user.email).find((r) => r !== "customer" && r !== "visitor");
   const draft = name ?? user.name;
 
   function save() {
@@ -130,6 +134,20 @@ export default function Profile() {
         <MenuRow icon="help-circle-outline" label="Help and FAQ" sub="Payments, tickets, contact" onPress={() => router.push("/help")} />
         <View style={{ height: 1, backgroundColor: colors.line }} />
         <MenuRow icon="scan-outline" label="Ticket scanner" sub="For organizers and door staff" onPress={() => router.push("/scanner")} />
+        {otherRole && (
+          <>
+            <View style={{ height: 1, backgroundColor: colors.line }} />
+            <MenuRow
+              icon="swap-horizontal-outline"
+              label={`Switch to ${roleLabels[otherRole]} view`}
+              sub="You have more than one role on this account"
+              onPress={() => {
+                setView(user.email, otherRole);
+                router.replace(homeForRole(otherRole));
+              }}
+            />
+          </>
+        )}
       </Card>
 
       <Button
