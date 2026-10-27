@@ -283,12 +283,32 @@ export function ImageSeatMapBuilder() {
 
   const clampZoom = (z: number) => Math.min(4, Math.max(0.2, +z.toFixed(2)));
 
-  /** Fits the whole chart in the canvas. */
+  /**
+   * Fits the seats and stage in the canvas (the whole chart when there are none yet), so a small room is not left tiny in
+   * the middle of a 1400px canvas, and scrolls to them.
+   */
+  function fitView(el: HTMLElement) {
+    const xs = layout.seats.flatMap((s) => [s.x - s.r, s.x + s.r]);
+    const ys = layout.seats.flatMap((s) => [s.y - s.r, s.y + s.r]);
+    if (layout.stage && layout.seats.length > 0) {
+      xs.push(layout.stage.x, layout.stage.x + layout.stage.w);
+      ys.push(layout.stage.y);
+    }
+    const hasSeats = xs.length > 0;
+    const left = hasSeats ? Math.max(0, Math.min(...xs) - 30) : 0;
+    const top = hasSeats ? Math.max(0, Math.min(...ys) - 30) : 0;
+    const width = hasSeats ? Math.min(layout.width, Math.max(...xs) + 30) - left : layout.width;
+    const z = clampZoom(Math.min(hasSeats ? 1.5 : 1, Math.floor(((el.clientWidth - 28) / Math.max(1, width)) * 20) / 20));
+    setZoom(z);
+    // The scroll position is set once the chart has the new size.
+    requestAnimationFrame(() => {
+      el.scrollLeft = left * z;
+      el.scrollTop = top * z;
+    });
+  }
+
   function fitToCanvas() {
-    const el = canvasBox.current;
-    if (!el) return;
-    const fit = (el.clientWidth - 28) / layout.width;
-    setZoom(clampZoom(Math.min(1, Math.floor(fit * 20) / 20)));
+    if (canvasBox.current) fitView(canvasBox.current);
   }
 
   // Open the chart fitted to the canvas so the whole venue is visible; the zoom buttons take over from there.
@@ -298,12 +318,13 @@ export function ImageSeatMapBuilder() {
     const ro = new ResizeObserver(([entry]) => {
       if (fitted.current || !entry || entry.contentRect.width === 0) return;
       fitted.current = true;
-      const fit = (entry.contentRect.width - 28) / layout.width;
-      setZoom(Math.min(1, Math.max(0.2, Math.floor(fit * 20) / 20)));
+      fitView(el);
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [layout.width]);
+    // Fitting happens once, when the canvas first has a size; the Fit button does it again on request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ctrl or Cmd with the mouse wheel zooms the chart instead of the page. Needs a non-passive listener to stop the page zoom.
   useEffect(() => {
