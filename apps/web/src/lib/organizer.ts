@@ -2,6 +2,7 @@
 // Anything the Figma screens don't spell out (extra rows, generated attendees) is placeholder.
 
 import type { CategoryId } from "./data";
+import type { Stage } from "./seating";
 
 export const organizer = {
   name: "Nimal Fernando",
@@ -37,6 +38,8 @@ export type LayoutSeat = {
   /** Derived from the position by numbering: "C", 12. Never edited by hand. */
   row: string;
   num: number;
+  /** Row and number were set by the rows table (or a template), so renumbering by position must leave them alone. */
+  locked?: boolean;
 };
 
 export type DetectionSettings = {
@@ -53,12 +56,14 @@ export type DetectionSettings = {
 };
 
 export type SeatLayout = {
-  /** The uploaded plan, downscaled, as a data URL so it survives a reload. */
+  /** The uploaded plan, downscaled, as a data URL so it survives a reload. Empty when the chart was built from scratch. */
   imageUrl: string;
   width: number;
   height: number;
   seats: LayoutSeat[];
   settings: DetectionSettings;
+  /** Where the stage is drawn. Optional so layouts saved before it existed still load. */
+  stage?: Stage;
 };
 
 export type SeatMapState = {

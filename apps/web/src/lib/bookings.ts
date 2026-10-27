@@ -20,6 +20,9 @@ export type PaymentState = "pending" | "confirmed" | "failed" | "expired" | "can
 
 export type BookingLine = { ticketName: string; qty: number; unitPrice: number };
 
+/** A seat a booking holds. `id` is the chart's seat id; `label` ("C12") is what the customer reads. */
+export type BookingSeat = { id: string; label: string };
+
 export type Booking = {
   id: string;
   /** Email of the account that made the booking. Customers only ever see their own. */
@@ -34,6 +37,8 @@ export type Booking = {
   fee: number;
   total: number;
   attendees: string[];
+  /** For numbered-seat events: one seat per attendee, in the same order as `attendees` and `lines`. */
+  seats?: BookingSeat[];
   paymentMethod: "Bank transfer" | "—";
   createdIso?: string;
   createdAt?: string;
