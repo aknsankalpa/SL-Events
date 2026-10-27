@@ -1,6 +1,7 @@
 import { categories, type CategoryId, type EventItem, type TicketType } from "./data";
 import { organizer, seatMapSectionStats, type EventDraft } from "./organizer";
 import { htmlToText, isEmptyHtml } from "./richText";
+import { chartFromSeatMap } from "./seating";
 
 const MONTHS_UPPER = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -99,6 +100,7 @@ export function draftToEventItem(draft: EventDraft, id: string): EventItem {
     description: paragraphs.length ? paragraphs : ["No description yet."],
     descriptionHtml: isEmptyHtml(draft.description) ? undefined : draft.description,
     seatingPlan,
+    seatChart: draft.sellMode === "seats" ? chartFromSeatMap(draft.seatMap) : undefined,
     organizer: draft.organizerName?.trim() || organizer.org,
     organizerAbout: draft.organizerAbout?.trim() || undefined,
     organizerEmail: draft.organizerEmail?.trim() || undefined,

@@ -2,7 +2,7 @@
 // Anything the Figma screens don't spell out (extra rows, generated attendees) is placeholder.
 
 import type { CategoryId } from "./data";
-import type { Stage } from "./seating";
+import { gridToLayout, type Stage } from "./seating";
 
 export const organizer = {
   name: "Nimal Fernando",
@@ -145,6 +145,11 @@ export function normalizeDraft(stored: unknown): EventDraft {
   if (!isRecord(stored)) return blankDraft;
   const d = stored as Partial<EventDraft>;
   const seatMap: Partial<SeatMapState> = isRecord(d.seatMap) ? d.seatMap : {};
+  const sections = Array.isArray(seatMap.sections) ? (seatMap.sections.filter(isRecord) as SeatSection[]) : [];
+  const blocked = Array.isArray(seatMap.blocked) ? seatMap.blocked : [];
+  const accessible = Array.isArray(seatMap.accessible) ? seatMap.accessible : [];
+  // Drafts saved with the old row-and-column builder become free-form seats, so every chart has one shape.
+  const converted = !seatMap.layout && sections.length ? gridToLayout(sections, blocked, accessible) : null;
   return {
     ...blankDraft,
     ...d,
@@ -164,13 +169,9 @@ export function normalizeDraft(stored: unknown): EventDraft {
           return { ...base, ...(t as Partial<DraftTicketType>) };
         })
       : [],
-    seatMap: {
-      ...blankDraft.seatMap,
-      ...seatMap,
-      sections: Array.isArray(seatMap.sections) ? seatMap.sections.filter(isRecord) : [],
-      blocked: Array.isArray(seatMap.blocked) ? seatMap.blocked : [],
-      accessible: Array.isArray(seatMap.accessible) ? seatMap.accessible : [],
-    },
+    seatMap: converted
+      ? { template: seatMap.template || "Rows table", sections: converted.sections, blocked: [], accessible: [], layout: converted.layout }
+      : { ...blankDraft.seatMap, ...seatMap, sections, blocked, accessible },
   };
 }
 

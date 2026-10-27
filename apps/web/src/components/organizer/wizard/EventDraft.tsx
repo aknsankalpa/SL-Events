@@ -12,10 +12,13 @@ import {
   type EventDraft,
   type SeatMapState,
 } from "@/lib/organizer";
+import { gridToLayout } from "@/lib/seating";
 
 export type { DraftTicketType, SeatMapState, EventDraft };
 
 export const VENUE_LIMIT = 500;
+
+const sampleChart = gridToLayout(seatSectionTemplates["Theatre with balcony"]!, ["H8", "H9"], ["A1", "A16"]);
 
 const initial: EventDraft = {
   name: "Kandyan Dance Gala 2026",
@@ -44,9 +47,10 @@ const initial: EventDraft = {
   ],
   seatMap: {
     template: "Theatre with balcony",
-    sections: seatSectionTemplates["Theatre with balcony"]!,
-    blocked: ["H8", "H9"],
-    accessible: ["A1", "A16"],
+    sections: sampleChart.sections,
+    blocked: [],
+    accessible: [],
+    layout: sampleChart.layout,
   },
   pricingReviewed: false,
 };

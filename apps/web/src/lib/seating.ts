@@ -186,7 +186,7 @@ export function gridToLayout(
   sections: SeatSection[],
   blocked: string[] = [],
   accessible: string[] = [],
-  uid: () => string = newGeneratedUid,
+  uid?: () => string,
 ): { layout: SeatLayout; sections: SeatSection[] } {
   const seats: LayoutSeat[] = [];
   const outSections: SeatSection[] = [];
@@ -208,9 +208,12 @@ export function gridToLayout(
       centerX: CHART_WIDTH / 2,
       top,
       numbering: section.numbering === "16 → 1" ? "right-left" : section.numbering === "Odd / even" ? "odd-even" : "left-right",
-      uid,
+      uid: uid ?? (() => ""),
     });
     for (const s of block) {
+      // Without an injected generator the ids come from the section and label, so converting the same saved draft on
+      // every load gives the same ids and a booking can keep pointing at its seat.
+      if (!uid) s.uid = `${section.id}-${seatLabel(s.row, s.num)}`;
       // Blocked and accessible ids refer to the original couple seat: couple 3 became seats 5 and 6 side by side.
       const id = seatLabel(s.row, couple ? Math.ceil(s.num / 2) : s.num);
       if (blocked.includes(id)) s.blocked = true;

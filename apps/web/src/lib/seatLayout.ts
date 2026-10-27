@@ -1,6 +1,7 @@
 import type { DetectionSettings, LayoutSeat, SeatLayout, SeatSection } from "./organizer";
 import { defaultDetection, detectSeats, findBlobs, numberSeats, otsu, toGray, type Detection } from "./seatDetect";
 import { findStrays, type StrayReason } from "./strayDots";
+import { CHART_WIDTH, defaultStage, rowIndex, rowLabel } from "./seating";
 
 /** Widest side kept for the stored plan. Big enough to see seats clearly, small enough for localStorage. */
 const MAX_WIDTH = 1400;
@@ -69,9 +70,31 @@ export function emptyLayout(plan: { imageUrl: string; width: number; height: num
   return { ...plan, seats, settings: defaultDetection };
 }
 
-/** Re-derives row and seat numbers after seats are added or removed, keeping each seat's section and flags. */
+/** A chart with no picture and no seats yet: the blank canvas, or the start of a rows table. */
+export function blankLayout(): SeatLayout {
+  return { imageUrl: "", width: CHART_WIDTH, height: 900, seats: [], settings: defaultDetection, stage: defaultStage() };
+}
+
+/**
+ * Re-derives row and seat numbers after seats are added or removed, keeping each seat's section and flags.
+ * Seats made with the rows table (`locked`) keep the labels they were given; only loose seats are numbered by position,
+ * and their rows take letters that no locked row uses, so two rows never share a label.
+ */
 export function renumber(seats: LayoutSeat[], settings: DetectionSettings): LayoutSeat[] {
-  return numberSeats(seats, settings);
+  const locked = seats.filter((s) => s.locked);
+  if (locked.length === 0) return numberSeats(seats, settings);
+  const loose = numberSeats(
+    seats.filter((s) => !s.locked),
+    settings,
+  );
+  const used = new Set(locked.map((s) => rowIndex(s.row)));
+  const remap = new Map<string, string>();
+  let next = 0;
+  for (const label of [...new Set(loose.map((s) => s.row))].sort((a, b) => rowIndex(a) - rowIndex(b))) {
+    while (used.has(next)) next++;
+    remap.set(label, rowLabel(next++));
+  }
+  return [...locked, ...loose.map((s) => ({ ...s, row: remap.get(s.row) ?? s.row }))];
 }
 
 /**

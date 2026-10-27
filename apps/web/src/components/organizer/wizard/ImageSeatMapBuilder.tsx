@@ -1,19 +1,30 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Accessibility,
+  AlignVerticalSpaceAround,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Ban,
   Eye,
   EyeOff,
+  Grid3x3,
+  Hand,
   Hash,
   ImagePlus,
   Layers,
+  ListOrdered,
   Loader2,
+  Maximize,
   Minus,
   MousePointer2,
+  MoveHorizontal,
   Plus,
   Redo2,
+  Rows3,
   ScanSearch,
   SquareDashedMousePointer,
   Trash2,
@@ -35,7 +46,9 @@ import {
   type SeatSection,
 } from "@/lib/organizer";
 import { MIN_SEATS } from "@/lib/seatDetect";
+import { addSeatNearRow, moveSeats, nextRowLabel, renumberRows, snapTo, spaceEvenly, straightenRows } from "@/lib/seatEdit";
 import {
+  blankLayout,
   defaultSections,
   cleanPlanImage,
   detectLayoutSeats,
@@ -46,30 +59,37 @@ import {
   renumber,
   sectionPalette,
 } from "@/lib/seatLayout";
+import { defaultStage, generateRows, gridToLayout, ROW_DEFAULTS, rowIndex, rowLabel, type NumberingOrder } from "@/lib/seating";
 import { strayReasonLabel, type StrayReason } from "@/lib/strayDots";
 import { Dialog, Panel } from "../ui";
 import { useEventDraft } from "./EventDraft";
 import { Select } from "@/components/ui/Select";
 
-type Tool = "select" | "area" | "add";
+type Tool = "select" | "area" | "add" | "pan";
 /** How a click or a dragged box changes the selection: start a new one, add to it, or take seats out of it. */
 type SelMode = "replace" | "add" | "remove";
 const SECTION_NAMES = ["Front row", "Middle", "Back row", "Balcony", "VIP"];
 type Snapshot = { layout: SeatLayout; sections: SeatSection[] };
 
 const MAX_BYTES = 12 * 1024 * 1024;
+/** Seats snap to this many chart pixels while moving or adding, so hand-placed rows come out straight. */
+const GRID = 10;
 
 /* ------------------------------------------------------------------------------------------------------------- */
-/* Upload banner: shown above the grid builder until a plan has been uploaded                                       */
+/* Start screen: the three ways to begin a chart                                                                    */
 /* ------------------------------------------------------------------------------------------------------------- */
 
-export function SeatPlanUpload() {
+/** The three ways to begin a chart. Everything ends up as the same free-form seats in the builder below. */
+export function SeatMapStart() {
   const { draft, patch } = useEventDraft();
   const inputId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [dragging, setDragging] = useState(false);
   const [empty, setEmpty] = useState<{ imageUrl: string; width: number; height: number } | null>(null);
+
+  const begin = (layout: SeatLayout, sections: SeatSection[], template: string) =>
+    patch({ seatMap: { ...draft.seatMap, template, sections, blocked: [], accessible: [], layout } });
 
   async function handle(file?: File) {
     if (!file) return;
@@ -90,7 +110,7 @@ export function SeatPlanUpload() {
         );
         return;
       }
-      patch({ seatMap: { ...draft.seatMap, template: "Uploaded plan", sections, blocked: [], accessible: [], layout: emptyLayout(plan, seats) } });
+      begin(emptyLayout(plan, seats), sections, "Uploaded plan");
     } catch {
       setError("That picture couldn't be read. Try exporting it as a PNG or JPG.");
     } finally {
@@ -98,25 +118,24 @@ export function SeatPlanUpload() {
     }
   }
 
-  function placeByHand() {
-    if (!empty) return;
-    const sections = defaultSections();
-    patch({ seatMap: { ...draft.seatMap, template: "Uploaded plan", sections, blocked: [], accessible: [], layout: emptyLayout(empty, []) } });
+  function preset(name: string) {
+    const built = gridToLayout(seatSectionTemplates[name] ?? []);
+    begin(built.layout, built.sections, name);
   }
 
+  const card =
+    "flex flex-col rounded-xl border border-line bg-surface p-5 text-left transition-colors focus-within:border-gold hover:border-gold/60";
+
   return (
-    <Panel className="mb-5 p-5 sm:p-6">
-      <div className="flex flex-wrap items-start gap-4">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-gold">
-          <Wand2 size={20} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1 basis-64">
-          <h2 className="text-base font-bold text-text">Build it from a picture</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted">
-            Upload an image of your venue&apos;s seating plan. We find every seat, group them into rows and number them. You then
-            review the chart and set up your sections and prices.
-          </p>
-        </div>
+    <div>
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-text">How do you want to build your seat chart?</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">
+          Pick one to begin. Whichever you choose, you can move, add, remove, block or re-price any seat afterwards.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
         <label
           htmlFor={inputId}
           onDragOver={(e) => {
@@ -129,17 +148,16 @@ export function SeatPlanUpload() {
             setDragging(false);
             void handle(e.dataTransfer.files[0]);
           }}
-          className={`flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed px-5 py-6 text-center transition-colors sm:w-72 ${
-            dragging ? "border-gold bg-gold/10" : "border-amber/40 hover:border-gold/70"
-          }`}
+          className={`${card} cursor-pointer ${dragging ? "border-gold bg-gold/10" : ""}`}
         >
-          {busy ? (
-            <Loader2 size={20} aria-hidden className="animate-spin text-gold" />
-          ) : (
-            <ImagePlus size={20} aria-hidden className="text-gold" />
-          )}
-          <span className="text-[13px] font-bold text-text">{busy ? "Finding seats…" : "Upload your seating plan"}</span>
-          <span className="text-[11px] text-dim">PNG, JPG or WebP · up to 12 MB</span>
+          <span className="flex size-11 items-center justify-center rounded-xl bg-gold/15 text-gold">
+            {busy ? <Loader2 size={20} aria-hidden className="animate-spin" /> : <Wand2 size={20} aria-hidden />}
+          </span>
+          <span className="mt-4 text-base font-bold text-text">{busy ? "Finding seats…" : "Upload a sketch"}</span>
+          <span className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            A photo or drawing of your seating plan. We find every seat, group them into rows and number them.
+          </span>
+          <span className="mt-4 text-[11px] text-dim">PNG, JPG or WebP · up to 12 MB</span>
           <input
             id={inputId}
             type="file"
@@ -152,6 +170,43 @@ export function SeatPlanUpload() {
             }}
           />
         </label>
+
+        <div className={card}>
+          <span className="flex size-11 items-center justify-center rounded-xl bg-gold/15 text-gold">
+            <Rows3 size={20} aria-hidden />
+          </span>
+          <h3 className="mt-4 text-base font-bold text-text">Fill in a table</h3>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            Say how many rows and how many seats in each. Add an aisle or a curve if your hall has one.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => begin(blankLayout(), defaultSections(), "Rows table")}>
+              Start with a table
+            </Button>
+            {Object.keys(seatSectionTemplates)
+              .filter((n) => seatSectionTemplates[n]!.length > 0)
+              .map((name) => (
+                <Button key={name} size="sm" variant="outline" className="border-line text-text hover:bg-surface-2" onClick={() => preset(name)}>
+                  {name}
+                </Button>
+              ))}
+          </div>
+        </div>
+
+        <div className={card}>
+          <span className="flex size-11 items-center justify-center rounded-xl bg-gold/15 text-gold">
+            <SquareDashedMousePointer size={20} aria-hidden />
+          </span>
+          <h3 className="mt-4 text-base font-bold text-text">Place seats one by one</h3>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            A blank canvas. Tap where each seat goes, then drag to fine-tune. Best for unusual rooms.
+          </p>
+          <div className="mt-4">
+            <Button size="sm" onClick={() => begin(blankLayout(), defaultSections(), "Blank canvas")}>
+              Start with a blank canvas
+            </Button>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -163,13 +218,18 @@ export function SeatPlanUpload() {
             <li>Crop away legends and decoration where you can.</li>
           </ul>
           {empty && (
-            <Button size="sm" variant="outline" className="mt-3 border-line text-text hover:bg-surface-2" onClick={placeByHand}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3 border-line text-text hover:bg-surface-2"
+              onClick={() => begin(emptyLayout(empty, []), defaultSections(), "Uploaded plan")}
+            >
               Use this picture and place seats by hand
             </Button>
           )}
         </div>
       )}
-    </Panel>
+    </div>
   );
 }
 
@@ -183,9 +243,12 @@ export function ImageSeatMapBuilder() {
   const layout = map.layout!;
   const sections = map.sections;
 
-  const [tool, setTool] = useState<Tool>("select");
+  const [tool, setTool] = useState<Tool>(map.template === "Blank canvas" && layout.seats.length === 0 ? "add" : "select");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(1);
+  const [snap, setSnap] = useState(true);
+  /** How far the seats (or the stage) being dragged have moved so far, in chart pixels. Committed when the finger lifts. */
+  const [moving, setMoving] = useState<{ kind: "seats" | "stage"; dx: number; dy: number } | null>(null);
   const [showImage, setShowImage] = useState(true);
   const [showLabels, setShowLabels] = useState(false);
   const [history, setHistory] = useState<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] });
@@ -210,8 +273,25 @@ export function ImageSeatMapBuilder() {
   // The drag lives in a ref (not state) so a fast press-move-release is handled even before React re-renders.
   const drag = useRef<{ x: number; y: number; ex: number; ey: number; mode: SelMode } | null>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
+  // Touch: every finger on the canvas, the two-finger pinch in progress, a one-finger pan, and a seat/stage drag.
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; zoom: number; cx: number; cy: number; padX: number; padY: number } | null>(null);
+  const panDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const moveDrag = useRef<{ kind: "seats" | "stage"; x: number; y: number; ids: Set<string>; moved: boolean; collapseTo: string | null } | null>(null);
+  // After a pinch changes the zoom, keep the spot between the fingers under the fingers.
+  const anchor = useRef<{ cx: number; cy: number; padX: number; padY: number; mx: number; my: number } | null>(null);
 
-  // Open the plan fitted to the canvas so the whole venue is visible; the zoom buttons take over from there.
+  const clampZoom = (z: number) => Math.min(4, Math.max(0.2, +z.toFixed(2)));
+
+  /** Fits the whole chart in the canvas. */
+  function fitToCanvas() {
+    const el = canvasBox.current;
+    if (!el) return;
+    const fit = (el.clientWidth - 28) / layout.width;
+    setZoom(clampZoom(Math.min(1, Math.floor(fit * 20) / 20)));
+  }
+
+  // Open the chart fitted to the canvas so the whole venue is visible; the zoom buttons take over from there.
   useEffect(() => {
     const el = canvasBox.current;
     if (!el) return;
@@ -219,14 +299,38 @@ export function ImageSeatMapBuilder() {
       if (fitted.current || !entry || entry.contentRect.width === 0) return;
       fitted.current = true;
       const fit = (entry.contentRect.width - 28) / layout.width;
-      setZoom(Math.min(1, Math.max(0.4, Math.floor(fit * 10) / 10)));
+      setZoom(Math.min(1, Math.max(0.2, Math.floor(fit * 20) / 20)));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, [layout.width]);
 
-  // Look for dots that don't look like the rest (letters, markers, extra marks) whenever the seats change.
+  // Ctrl or Cmd with the mouse wheel zooms the chart instead of the page. Needs a non-passive listener to stop the page zoom.
   useEffect(() => {
+    const el = canvasBox.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.min(4, Math.max(0.2, +(z * (e.deltaY < 0 ? 1.1 : 0.9)).toFixed(2))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    const el = canvasBox.current;
+    if (!a || !el) return;
+    anchor.current = null;
+    el.scrollLeft = a.cx * zoom + a.padX - a.mx;
+    el.scrollTop = a.cy * zoom + a.padY - a.my;
+  }, [zoom]);
+
+  // Look for dots that don't look like the rest (letters, markers, extra marks) whenever the seats change.
+  // A chart built without a picture has nothing to compare against.
+  useEffect(() => {
+    if (!layout.imageUrl) return;
     let alive = true;
     findStrayDots(layout.imageUrl, layout.seats)
       .then((found) => alive && setStrays(found))
@@ -271,6 +375,7 @@ export function ImageSeatMapBuilder() {
 
   // Build the cleaned picture once per image and detection settings (not on every seat edit).
   useEffect(() => {
+    if (!layout.imageUrl) return;
     let alive = true;
     cleanPlanImage(layout.imageUrl, layout.settings, medianR * 2)
       .then((url) => alive && setCleanUrl(url))
@@ -303,13 +408,15 @@ export function ImageSeatMapBuilder() {
     });
   }
 
-  /** The dot under a point of the plan, if any. The Area tool uses it to turn a plain click into a toggle. */
+  /** The dot under a point of the plan, if any. Fingers are bigger than seats, so touch gets a wider catch area. */
   function seatAt(p: { x: number; y: number }) {
+    const coarse = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+    const reach = (coarse ? 20 : 9) / zoom;
     let best: LayoutSeat | null = null;
     let bestD = Infinity;
     for (const seat of layout.seats) {
       const d = (seat.x - p.x) ** 2 + (seat.y - p.y) ** 2;
-      if (d < bestD && d <= (seat.r * 1.4) ** 2) {
+      if (d < bestD && d <= Math.max(seat.r * 1.4, reach) ** 2) {
         best = seat;
         bestD = d;
       }
@@ -317,26 +424,59 @@ export function ImageSeatMapBuilder() {
     return best;
   }
 
+  /** Runs first for every finger, so a second finger turns whatever was happening into a pinch. */
+  function onCanvasDownCapture(e: React.PointerEvent<SVGSVGElement>) {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const box = canvasBox.current;
+    const svg = svgRef.current;
+    if (pointers.current.size !== 2 || !box || !svg) return;
+    const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
+    drag.current = null;
+    moveDrag.current = null;
+    panDrag.current = null;
+    setRect(null);
+    setMoving(null);
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const at = svg.getBoundingClientRect();
+    const frame = box.getBoundingClientRect();
+    pinch.current = {
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      zoom,
+      // The chart point between the fingers, and where the chart starts inside the scrolling frame.
+      cx: (midX - at.left) / zoom,
+      cy: (midY - at.top) / zoom,
+      padX: at.left - frame.left + box.scrollLeft,
+      padY: at.top - frame.top + box.scrollTop,
+    };
+  }
+
   function onCanvasDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (pinch.current) return;
     const p = toImage(e);
+    if (tool === "pan") {
+      const box = canvasBox.current!;
+      svgRef.current!.setPointerCapture(e.pointerId);
+      panDrag.current = { x: e.clientX, y: e.clientY, left: box.scrollLeft, top: box.scrollTop };
+      return;
+    }
     if (tool === "add") {
-      const nearest = layout.seats.reduce<{ d: number; seat: LayoutSeat | null }>(
-        (best, s) => {
-          const d = (s.x - p.x) ** 2 + (s.y - p.y) ** 2;
-          return d < best.d ? { d, seat: s } : best;
-        },
-        { d: Infinity, seat: null },
-      );
       const seat: LayoutSeat = {
         uid: newSeatUid(),
-        x: p.x,
-        y: p.y,
+        x: snap ? snapTo(p.x, GRID) : p.x,
+        y: snap ? snapTo(p.y, GRID) : p.y,
         r: medianR,
-        section: nearest.seat?.section ?? sections[0]?.id ?? null,
+        section: layout.seats.reduce<{ d: number; section: string | null }>(
+          (best, s) => {
+            const d = (s.x - p.x) ** 2 + (s.y - p.y) ** 2;
+            return d < best.d ? { d, section: s.section } : best;
+          },
+          { d: Infinity, section: sections[0]?.id ?? null },
+        ).section,
         row: "",
         num: 0,
       };
-      setSeats([...layout.seats, seat]);
+      setSeats(addSeatNearRow(layout.seats, seat));
       // The new dot joins the current selection, so a group can be completed and then named in one go.
       setSelected((cur) => new Set([...cur, seat.uid]));
       return;
@@ -352,6 +492,47 @@ export function ImageSeatMapBuilder() {
   }
 
   function onCanvasMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const box = canvasBox.current;
+
+    // Two fingers: zoom by how far apart they are, and follow them so the chart moves with the hands.
+    if (pinch.current && box) {
+      if (pointers.current.size < 2) return;
+      const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
+      const pc = pinch.current;
+      const next = clampZoom((pc.zoom * (Math.hypot(a.x - b.x, a.y - b.y) || 1)) / pc.dist);
+      const frame = box.getBoundingClientRect();
+      const mx = (a.x + b.x) / 2 - frame.left;
+      const my = (a.y + b.y) / 2 - frame.top;
+      if (next === zoom) {
+        box.scrollLeft = pc.cx * zoom + pc.padX - mx;
+        box.scrollTop = pc.cy * zoom + pc.padY - my;
+      } else {
+        anchor.current = { cx: pc.cx, cy: pc.cy, padX: pc.padX, padY: pc.padY, mx, my };
+        setZoom(next);
+      }
+      return;
+    }
+
+    const pan = panDrag.current;
+    if (pan && box) {
+      box.scrollLeft = pan.left - (e.clientX - pan.x);
+      box.scrollTop = pan.top - (e.clientY - pan.y);
+      return;
+    }
+
+    const md = moveDrag.current;
+    if (md) {
+      const p = toImage(e);
+      const dx = p.x - md.x;
+      const dy = p.y - md.y;
+      // A press that barely moves is a click, not a drag.
+      if (!md.moved && Math.hypot(dx, dy) * zoom < 4) return;
+      md.moved = true;
+      setMoving({ kind: md.kind, dx, dy });
+      return;
+    }
+
     const d = drag.current;
     if (!d) return;
     const p = toImage(e);
@@ -360,7 +541,49 @@ export function ImageSeatMapBuilder() {
     setRect({ x1: d.x, y1: d.y, x2: p.x, y2: p.y });
   }
 
+  function onCanvasCancel(e: React.PointerEvent<SVGSVGElement>) {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    panDrag.current = null;
+    moveDrag.current = null;
+    drag.current = null;
+    setRect(null);
+    setMoving(null);
+  }
+
   function onCanvasUp(e: React.PointerEvent<SVGSVGElement>) {
+    pointers.current.delete(e.pointerId);
+    if (pinch.current) {
+      // Lifting one finger ends the pinch; the finger left behind does nothing until it is lifted too.
+      if (pointers.current.size < 2) pinch.current = null;
+      return;
+    }
+    if (panDrag.current) {
+      panDrag.current = null;
+      return;
+    }
+
+    const md = moveDrag.current;
+    if (md) {
+      moveDrag.current = null;
+      setMoving(null);
+      if (!md.moved) {
+        // Pressing a seat inside a group only drags the group; a plain click narrows the selection to that seat.
+        if (md.collapseTo) setSelected(new Set([md.collapseTo]));
+        return;
+      }
+      const end = toImage(e);
+      const dx = end.x - md.x;
+      const dy = end.y - md.y;
+      if (md.kind === "stage" && layout.stage) {
+        const st = layout.stage;
+        commit({ layout: { ...layout, stage: { ...st, x: Math.round(snap ? snapTo(st.x + dx, GRID) : st.x + dx), y: Math.round(snap ? snapTo(st.y + dy, GRID) : st.y + dy) } } });
+      } else {
+        setSeats(moveSeats(layout.seats, md.ids, dx, dy, layout.width, layout.height, snap ? GRID : 0));
+      }
+      return;
+    }
+
     const d = drag.current;
     drag.current = null;
     if (!d) return;
@@ -381,14 +604,41 @@ export function ImageSeatMapBuilder() {
     applySelection(hit, d.mode);
   }
 
+  /** Pressing a seat selects it, and dragging from it moves it (and the rest of the selection). */
   function onSeatDown(e: React.PointerEvent, uid: string) {
-    if (tool !== "select") return;
+    if (tool !== "select" || pinch.current || pointers.current.size > 1) return;
     e.stopPropagation();
     const mode = modeFor(e);
-    if (mode === "replace") setSelected(new Set([uid]));
-    // Shift-click keeps working as a toggle, as before.
-    else if (mode === "add" && selected.has(uid) && (e.shiftKey || e.metaKey || e.ctrlKey)) applySelection([uid], "remove");
-    else applySelection([uid], mode);
+    let ids: Set<string>;
+    let collapseTo: string | null = null;
+    if (mode === "replace") {
+      if (selected.has(uid) && selected.size > 1) {
+        ids = new Set(selected);
+        collapseTo = uid;
+      } else {
+        ids = new Set([uid]);
+        setSelected(ids);
+      }
+    } else if (mode === "add" && selected.has(uid) && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      // Shift-click keeps working as a toggle, as before.
+      applySelection([uid], "remove");
+      return;
+    } else {
+      applySelection([uid], mode);
+      ids = mode === "remove" ? new Set() : new Set([...selected, uid]);
+    }
+    if (ids.size === 0) return;
+    const p = toImage(e);
+    svgRef.current!.setPointerCapture(e.pointerId);
+    moveDrag.current = { kind: "seats", x: p.x, y: p.y, ids, moved: false, collapseTo };
+  }
+
+  function onStageDown(e: React.PointerEvent) {
+    if (tool !== "select" || pinch.current || pointers.current.size > 1) return;
+    e.stopPropagation();
+    const p = toImage(e);
+    svgRef.current!.setPointerCapture(e.pointerId);
+    moveDrag.current = { kind: "stage", x: p.x, y: p.y, ids: new Set(), moved: false, collapseTo: null };
   }
 
   function selectRow(row: string) {
@@ -410,7 +660,36 @@ export function ImageSeatMapBuilder() {
     setSelected(new Set());
   }
 
+  /** Moves the selection a few pixels: arrow keys on a keyboard, the arrow buttons on a phone. */
+  const nudge = (dx: number, dy: number) => {
+    if (picked.length) setSeats(moveSeats(layout.seats, selected, dx, dy, layout.width, layout.height, 0));
+  };
+  const straighten = () => setSeats(straightenRows(layout.seats, selected));
+  const spaceOut = () => setSeats(spaceEvenly(layout.seats, selected));
+  const renumberPicked = () => setSeats(renumberRows(layout.seats, selected));
+
+  /** The rows table: adds a block of seats under the chart, in a new section or an existing one, and selects them to adjust. */
+  function addRows(block: { seats: LayoutSeat[]; section?: SeatSection; bottom: number }) {
+    commit({
+      layout: { ...layout, height: Math.max(layout.height, Math.ceil(block.bottom + 70)), seats: [...layout.seats, ...block.seats] },
+      sections: block.section ? [...sections, block.section] : sections,
+    });
+    setSelected(new Set(block.seats.map((s) => s.uid)));
+    setTool("select");
+    setNote(`Added ${block.seats.length} seats. Drag them to place them, or fine-tune with the arrows.`);
+  }
+
+  const setStage = (stage: SeatLayout["stage"]) => commit({ layout: { ...layout, stage } });
+
   function onKeyDown(e: React.KeyboardEvent) {
+    const tag = (e.target as HTMLElement).tagName;
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[e.key] && picked.length && tag !== "INPUT" && tag !== "SELECT" && tag !== "TEXTAREA") {
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      nudge(arrows[e.key]![0] * step, arrows[e.key]![1] * step);
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && picked.length && (e.target as HTMLElement).tagName !== "INPUT") {
       e.preventDefault();
       deleteSelected();
@@ -537,16 +816,9 @@ export function ImageSeatMapBuilder() {
     }
   }
 
-  function backToGrid() {
-    const sectionsGrid = seatSectionTemplates["Theatre with balcony"]!;
-    patch({
-      seatMap: {
-        template: "Theatre with balcony",
-        sections: sectionsGrid,
-        blocked: ["H8", "H9"],
-        accessible: ["A1", "A16"],
-      },
-    });
+  /** Back to the start screen, with nothing built. */
+  function startOver() {
+    patch({ seatMap: { template: "", sections: [], blocked: [], accessible: [] } });
     setConfirm(null);
   }
 
@@ -562,29 +834,33 @@ export function ImageSeatMapBuilder() {
             <ScanSearch size={18} aria-hidden />
           </span>
           <div className="leading-tight">
-            <p className="text-sm font-bold text-text">Seating plan from your image</p>
+            <p className="text-sm font-bold text-text">{layout.imageUrl ? "Seating plan from your image" : "Seat chart"}</p>
             <p className="mt-1 text-[11px] text-dim" aria-live="polite">
               {layout.seats.length} seats · {rows} rows · {sections.length} section{sections.length === 1 ? "" : "s"}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="border-line text-text hover:bg-surface-2" onClick={() => replaceInput.current?.click()}>
-            <ImagePlus size={14} aria-hidden /> Replace image
-          </Button>
-          <input
-            ref={replaceInput}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="sr-only"
-            aria-label="Upload a different seating plan"
-            onChange={(e) => {
-              void replaceImage(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-          <Button variant="ghost" size="sm" onClick={() => setConfirm("grid")}>
-            Use the row and column builder instead
+          {layout.imageUrl && (
+            <>
+              <Button variant="outline" size="sm" className="border-line text-text hover:bg-surface-2" onClick={() => replaceInput.current?.click()}>
+                <ImagePlus size={14} aria-hidden /> Replace image
+              </Button>
+              <input
+                ref={replaceInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                aria-label="Upload a different seating plan"
+                onChange={(e) => {
+                  void replaceImage(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => (layout.seats.length > 0 ? setConfirm("grid") : startOver())}>
+            Start over
           </Button>
         </div>
       </Panel>
@@ -603,7 +879,10 @@ export function ImageSeatMapBuilder() {
               <Tool label="Add a seat" active={tool === "add"} onClick={() => setTool("add")}>
                 <Plus size={16} />
               </Tool>
-              {tool !== "add" && (
+              <Tool label="Move around the chart" active={tool === "pan"} onClick={() => setTool("pan")}>
+                <Hand size={16} />
+              </Tool>
+              {tool !== "add" && tool !== "pan" && (
                 <div role="group" aria-label="What selecting does" className="ml-1 inline-flex gap-0.5 rounded-lg border border-line p-0.5">
                   {(
                     [
@@ -647,40 +926,52 @@ export function ImageSeatMapBuilder() {
                 <Redo2 size={16} />
               </Tool>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Tool label={showImage ? "Hide the plan image" : "Show the plan image"} active={showImage} onClick={() => setShowImage((v) => !v)}>
-                {showImage ? <Eye size={16} /> : <EyeOff size={16} />}
-              </Tool>
-              <Tool
-                label={showOriginal ? "Hide text and markers from the picture" : "Show text and markers from the picture"}
-                active={showOriginal}
-                disabled={!showImage}
-                onClick={() => setShowOriginal((v) => !v)}
-              >
-                <Layers size={16} />
-              </Tool>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {layout.imageUrl && (
+                <>
+                  <Tool label={showImage ? "Hide the plan image" : "Show the plan image"} active={showImage} onClick={() => setShowImage((v) => !v)}>
+                    {showImage ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </Tool>
+                  <Tool
+                    label={showOriginal ? "Hide text and markers from the picture" : "Show text and markers from the picture"}
+                    active={showOriginal}
+                    disabled={!showImage}
+                    onClick={() => setShowOriginal((v) => !v)}
+                  >
+                    <Layers size={16} />
+                  </Tool>
+                </>
+              )}
               <Tool label="Show seat labels" active={showLabels} onClick={() => setShowLabels((v) => !v)}>
                 <Hash size={16} />
               </Tool>
+              <Tool label={snap ? "Snap to grid is on" : "Snap to grid is off"} active={snap} onClick={() => setSnap((v) => !v)}>
+                <Grid3x3 size={16} />
+              </Tool>
               <span aria-hidden className="mx-1 h-6 w-px bg-line" />
-              <Tool label="Zoom out" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.2).toFixed(1)))}>
+              <Tool label="Zoom out" onClick={() => setZoom((z) => clampZoom(z - (z > 1 ? 0.25 : 0.1)))}>
                 <ZoomOut size={16} />
               </Tool>
               <span className="w-11 text-center text-xs font-bold text-text">{Math.round(zoom * 100)}%</span>
-              <Tool label="Zoom in" onClick={() => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(1)))}>
+              <Tool label="Zoom in" onClick={() => setZoom((z) => clampZoom(z + (z >= 1 ? 0.25 : 0.1)))}>
                 <ZoomIn size={16} />
+              </Tool>
+              <Tool label="Fit the whole chart" onClick={fitToCanvas}>
+                <Maximize size={16} />
               </Tool>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-[11px] text-dim">
+          {/* Fixed height: the selected count appears and wraps while seats are placed, and the canvas must not jump under the finger. */}
+          <div className="flex min-h-[3.5rem] flex-wrap content-center items-center justify-between gap-x-4 gap-y-1 border-b border-line bg-surface-2 px-4 py-2 text-[11px] text-dim">
             <p>
               {tool === "select" &&
                 "Click a dot to select it. Use Add or Remove (or Shift / Alt) to fix the group dot by dot. Click a row letter to select a whole row."}
               {tool === "area" &&
                 "Drag a box around dots to select them, then use Add or Remove to correct it. A single click toggles one dot. Shift adds, Alt removes."}
               {tool === "add" &&
-                "Click the plan to place a dot the detector missed. New dots join your selection so you can put them in a section."}
+                "Click or tap the chart to place a seat. Next to a row it joins that row; new seats join your selection so you can put them in a section."}
+              {tool === "pan" && "Drag to move around the chart. On a phone you can also pinch with two fingers at any time."}
             </p>
             {selectedCount > 0 && (
               <p className="flex items-center gap-2 font-bold text-gold" aria-live="polite">
@@ -697,16 +988,52 @@ export function ImageSeatMapBuilder() {
               ref={svgRef}
               viewBox={`0 0 ${layout.width} ${layout.height}`}
               style={{ width: layout.width * zoom, maxWidth: "none" }}
-              className={`block select-none touch-none ${tool === "select" ? "cursor-default" : "cursor-crosshair"}`}
+              className={`block select-none touch-none ${
+                tool === "pan" ? "cursor-grab" : tool === "select" ? "cursor-default" : "cursor-crosshair"
+              }`}
+              onPointerDownCapture={onCanvasDownCapture}
               onPointerDown={onCanvasDown}
               onPointerMove={onCanvasMove}
               onPointerUp={onCanvasUp}
+              onPointerCancel={onCanvasCancel}
               role="application"
-              aria-label="Seating plan. Use the tools above to select and edit seats."
+              aria-label="Seat chart. Use the tools above to select and edit seats."
             >
               <rect width={layout.width} height={layout.height} fill="#0b0907" />
+              {layout.stage && (
+                <g
+                  transform={moving?.kind === "stage" ? `translate(${moving.dx} ${moving.dy})` : undefined}
+                  onPointerDown={onStageDown}
+                  className={tool === "select" ? "cursor-move" : undefined}
+                >
+                  <rect
+                    x={layout.stage.x}
+                    y={layout.stage.y}
+                    width={layout.stage.w}
+                    height={layout.stage.h}
+                    rx={10}
+                    fill="#f7cb60"
+                    fillOpacity={0.14}
+                    stroke="#f7cb60"
+                    strokeOpacity={0.6}
+                    strokeDasharray="6 4"
+                  />
+                  <text
+                    x={layout.stage.x + layout.stage.w / 2}
+                    y={layout.stage.y + layout.stage.h / 2 + 5}
+                    textAnchor="middle"
+                    fontSize={15}
+                    fontWeight={700}
+                    fill="#f7cb60"
+                    pointerEvents="none"
+                    style={{ letterSpacing: "0.2em", textTransform: "uppercase" }}
+                  >
+                    {layout.stage.label}
+                  </text>
+                </g>
+              )}
               {/* Greyscale on purpose: the only colours on the chart should be the sections' colours. */}
-              {showImage && (
+              {showImage && layout.imageUrl && (
                 <image
                   href={showOriginal || !cleanUrl ? layout.imageUrl : cleanUrl}
                   width={layout.width}
@@ -722,6 +1049,7 @@ export function ImageSeatMapBuilder() {
                 return (
                   <g
                     key={s.uid}
+                    transform={moving?.kind === "seats" && isSel ? `translate(${moving.dx} ${moving.dy})` : undefined}
                     onPointerDown={(e) => onSeatDown(e, s.uid)}
                     className={tool === "select" ? "cursor-pointer" : undefined}
                   >
@@ -800,6 +1128,27 @@ export function ImageSeatMapBuilder() {
             </svg>
           </div>
 
+          {/* On a phone the side panels are far below the chart, so the everyday actions follow the thumb. */}
+          {selectedCount > 0 && (
+            <div
+              role="toolbar"
+              aria-label="Actions for the selected seats"
+              className="sticky bottom-2 z-10 mx-2 mb-2 flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-gold/40 bg-surface/95 p-2 shadow-lg backdrop-blur xl:hidden"
+            >
+              <span className="px-1.5 text-xs font-bold text-gold">{selectedCount} selected</span>
+              <BarButton onClick={() => change((s) => ({ ...s, blocked: !allBlocked }))}>
+                <Ban size={14} aria-hidden /> {allBlocked ? "Unblock" : "Block"}
+              </BarButton>
+              <BarButton onClick={() => change((s) => ({ ...s, accessible: !allAccessible }))}>
+                <Accessibility size={14} aria-hidden /> {allAccessible ? "Not accessible" : "Accessible"}
+              </BarButton>
+              <BarButton onClick={deleteSelected} danger>
+                <Trash2 size={14} aria-hidden /> Delete
+              </BarButton>
+              <BarButton onClick={() => setSelected(new Set())}>Clear</BarButton>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line px-4 py-3 text-[11px] text-dim">
             {sections.map((s) => (
               <span key={s.id} className="flex items-center gap-2">
@@ -817,6 +1166,8 @@ export function ImageSeatMapBuilder() {
 
         {/* ---- side panels ---- */}
         <div className="min-w-0 space-y-5">
+          <AddRowsPanel layout={layout} sections={sections} onAdd={addRows} defaultOpen={layout.seats.length === 0} />
+
           {strayList.length > 0 && (
             <Panel className="border-amber/50 p-5">
               <h2 className="flex items-center gap-2 text-base font-bold text-text">
@@ -865,7 +1216,40 @@ export function ImageSeatMapBuilder() {
                     Clear
                   </Action>
                 </div>
-                <p className="mt-3 text-[11px] leading-relaxed text-dim">
+                <div className="mt-5 border-t border-line pt-5">
+                  <h3 className="text-[11px] font-bold uppercase tracking-widest text-dim">Move and arrange</h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-dim">Drag seats on the chart, or nudge them. Shift moves ten at a time on a keyboard.</p>
+                  <div className="mt-3 flex items-start gap-4">
+                    <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Nudge the selected seats">
+                      <span />
+                      <Nudge label="Up" onClick={() => nudge(0, -2)}>
+                        <ArrowUp size={16} />
+                      </Nudge>
+                      <span />
+                      <Nudge label="Left" onClick={() => nudge(-2, 0)}>
+                        <ArrowLeft size={16} />
+                      </Nudge>
+                      <Nudge label="Down" onClick={() => nudge(0, 2)}>
+                        <ArrowDown size={16} />
+                      </Nudge>
+                      <Nudge label="Right" onClick={() => nudge(2, 0)}>
+                        <ArrowRight size={16} />
+                      </Nudge>
+                    </div>
+                    <div className="grid min-w-0 flex-1 gap-2">
+                      <Action onClick={straighten}>
+                        <AlignVerticalSpaceAround size={14} aria-hidden /> Straighten rows
+                      </Action>
+                      <Action onClick={spaceOut}>
+                        <MoveHorizontal size={14} aria-hidden /> Space evenly
+                      </Action>
+                      <Action onClick={renumberPicked}>
+                        <ListOrdered size={14} aria-hidden /> Renumber rows
+                      </Action>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-4 text-[11px] leading-relaxed text-dim">
                   Wrong dots (text, a stage edge)? Switch to <strong className="text-muted">Remove</strong> and click them, or{" "}
                   <strong className="text-muted">Delete dots</strong> to take them off the chart. Missing a dot? Use the{" "}
                   <strong className="text-muted">+</strong> tool.
@@ -1007,6 +1391,9 @@ export function ImageSeatMapBuilder() {
             </ul>
           </Panel>
 
+          <StagePanel stage={layout.stage} onChange={setStage} />
+
+          {layout.imageUrl && (
           <Panel className="p-5">
             <h2 className="text-base font-bold text-text">Detection</h2>
             <p className="mt-1 text-[11px] leading-relaxed text-dim">If seats were missed or text was picked up, adjust these and detect again.</p>
@@ -1103,6 +1490,7 @@ export function ImageSeatMapBuilder() {
               </div>
             </div>
           </Panel>
+          )}
 
           <Panel className="p-5">
             <dl className="space-y-3 text-[13px]">
@@ -1123,6 +1511,11 @@ export function ImageSeatMapBuilder() {
                 <dd className="text-base font-bold text-text">{formatKrw(revenue)}</dd>
               </div>
             </dl>
+            {note && !layout.imageUrl && (
+              <p role="status" className="mt-3 text-[11px] leading-relaxed text-muted">
+                {note}
+              </p>
+            )}
             {unassigned > 0 && (
               <p className="mt-3 text-[11px] leading-relaxed text-danger">
                 Seats with a red dashed outline have no section. Select them and put them in a section before you publish.
@@ -1152,16 +1545,17 @@ export function ImageSeatMapBuilder() {
         </div>
       </Dialog>
 
-      <Dialog open={confirm === "grid"} onClose={() => setConfirm(null)} title="Switch to the row and column builder?">
+      <Dialog open={confirm === "grid"} onClose={() => setConfirm(null)} title="Start the seat chart over?">
         <p className="text-sm leading-relaxed text-muted">
-          Your uploaded plan and the seats built from it will be removed from this event. You can upload it again later.
+          Every seat, section and price on this chart will be removed from the event, and you will go back to choosing how to build
+          it. This cannot be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <Button variant="ghost" onClick={() => setConfirm(null)}>
-            Keep the plan
+            Keep my chart
           </Button>
-          <Button variant="danger" onClick={backToGrid}>
-            Switch builder
+          <Button variant="danger" onClick={startOver}>
+            Start over
           </Button>
         </div>
       </Dialog>
@@ -1192,6 +1586,20 @@ function Tool({
       onClick={onClick}
       className={`flex size-9 items-center justify-center rounded-lg border transition-colors focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-40 ${
         active ? "border-gold bg-gold/15 text-gold" : "border-line text-text hover:border-gold/50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BarButton({ children, onClick, danger }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold focus-visible:focus-ring ${
+        danger ? "border-danger/50 text-danger" : "border-line text-text"
       }`}
     >
       {children}
@@ -1295,6 +1703,289 @@ function ColorSwatches({ value, onChange, label }: { value: string; onChange: (c
           className="absolute inset-0 size-full cursor-pointer opacity-0"
         />
       </label>
+    </div>
+  );
+}
+
+function Nudge({ children, label, onClick }: { children: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Nudge ${label.toLowerCase()}`}
+      onClick={onClick}
+      className="flex size-10 items-center justify-center rounded-lg border border-line text-text transition-colors hover:border-gold/50 hover:text-gold focus-visible:focus-ring"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A number box that stays a valid number: typing is free, the value is kept inside its range. */
+function NumField({ label, value, min, max, onChange, hint }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; hint?: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-bold text-muted">{label}</span>
+      <input
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value.replace(/\D/g, "")) || min)))}
+        className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] font-bold text-text focus:border-gold focus:outline-none"
+      />
+      {hint && <span className="mt-1 block text-[11px] text-dim">{hint}</span>}
+    </label>
+  );
+}
+
+/**
+ * "Fill in a table": how many rows, how many seats in each, where the aisle goes and how much the rows curve. Run it
+ * again for the balcony or any other block. The new seats are selected afterwards, ready to drag into place.
+ */
+function AddRowsPanel({
+  layout,
+  sections,
+  onAdd,
+  defaultOpen,
+}: {
+  layout: SeatLayout;
+  sections: SeatSection[];
+  onAdd: (block: { seats: LayoutSeat[]; section?: SeatSection; bottom: number }) => void;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const empty = layout.seats.length === 0;
+  const [target, setTarget] = useState<string>(empty && sections[0] ? sections[0].id : "new");
+  const [name, setName] = useState("Balcony");
+  const [color, setColor] = useState<string>(sectionPalette[1]!);
+  const [price, setPrice] = useState(30000);
+  const [rowCount, setRowCount] = useState(8);
+  const [perRow, setPerRow] = useState(14);
+  const [aisle, setAisle] = useState(7);
+  const [curve, setCurve] = useState(0);
+  const [numbering, setNumbering] = useState<NumberingOrder>("left-right");
+  const [first, setFirst] = useState("");
+
+  const autoFirst = nextRowLabel(layout.seats);
+  const firstLabel = /^[A-Za-z]{1,2}$/.test(first.trim()) ? first.trim().toUpperCase() : autoFirst;
+  const lastLabel = rowLabel(Math.max(0, rowIndex(firstLabel)) + rowCount - 1);
+  const total = rowCount * perRow;
+
+  function submit() {
+    const sectionId = target === "new" ? `sec-${Date.now().toString(36)}` : target;
+    const bottom = empty ? (layout.stage ? layout.stage.y + layout.stage.h : 30) : Math.max(...layout.seats.map((s) => s.y + s.r));
+    const top = bottom + (empty ? 70 : 60);
+    const seats = generateRows({
+      sectionId,
+      rows: rowCount,
+      seatsPerRow: perRow,
+      firstRow: firstLabel,
+      aisleAfter: aisle,
+      curve,
+      centerX: layout.width / 2,
+      top,
+      numbering,
+    });
+    const section: SeatSection | undefined =
+      target === "new"
+        ? { id: sectionId, name: name.trim() || "New section", color, price, rows: "—", seatsPerRow: 0, aisleAfter: 0, numbering: "1 → 16", seatType: "Single" }
+        : undefined;
+    onAdd({ seats, section, bottom: top + rowCount * ROW_DEFAULTS.rowGap + curve * 170 });
+    setFirst("");
+    if (target === "new") {
+      setTarget(sectionId);
+      setColor(sectionPalette[(sections.length + 2) % sectionPalette.length]!);
+    }
+  }
+
+  return (
+    <Panel className="p-5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 text-left focus-visible:focus-ring"
+      >
+        <span className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-gold/15 text-gold">
+            <Rows3 size={16} aria-hidden />
+          </span>
+          <span className="leading-tight">
+            <span className="block text-base font-bold text-text">Add rows from a table</span>
+            <span className="mt-0.5 block text-[11px] text-dim">How many rows, how many seats in each</span>
+          </span>
+        </span>
+        <span aria-hidden className="text-lg text-dim">
+          {open ? "−" : "+"}
+        </span>
+      </button>
+
+      {open && (
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <NumField label="Rows" value={rowCount} min={1} max={40} onChange={setRowCount} />
+            <NumField label="Seats in each row" value={perRow} min={1} max={40} onChange={setPerRow} />
+            <NumField label="Aisle after seat" value={aisle} min={0} max={39} onChange={setAisle} hint="0 for no aisle" />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-muted">First row letter</span>
+              <input
+                value={first}
+                maxLength={2}
+                placeholder={autoFirst}
+                onChange={(e) => setFirst(e.target.value.replace(/[^A-Za-z]/g, ""))}
+                className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] font-bold uppercase text-text placeholder:text-dim focus:border-gold focus:outline-none"
+              />
+            </label>
+          </div>
+
+          <Slider
+            label="Curve"
+            hint={curve === 0 ? "Straight rows" : curve < 0.5 ? "Gentle curve" : "Curved around the stage"}
+            min={0}
+            max={1}
+            step={0.1}
+            value={curve}
+            onChange={setCurve}
+          />
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-muted">Seat numbers run</span>
+            <Select
+              value={numbering}
+              onChange={(e) => setNumbering(e.target.value as NumberingOrder)}
+              className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text focus:border-gold focus:outline-none"
+            >
+              <option value="left-right">1, 2, 3… from the left</option>
+              <option value="right-left">1, 2, 3… from the right</option>
+              <option value="odd-even">Odd on the left, even on the right</option>
+            </Select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-muted">Put them in</span>
+            <Select
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text focus:border-gold focus:outline-none"
+            >
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+              <option value="new">A new section…</option>
+            </Select>
+          </label>
+
+          {target === "new" && (
+            <div className="space-y-4 rounded-lg border border-line bg-surface-2 p-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-muted">Section name</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-[13px] text-text focus:border-gold focus:outline-none"
+                />
+              </label>
+              <div>
+                <span className="mb-1.5 block text-xs font-bold text-muted">Colour</span>
+                <ColorSwatches value={color} onChange={setColor} label="New section colour" />
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-muted">Price per seat</span>
+                <span className="flex h-10 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-xs text-muted focus-within:border-gold">
+                  ₩
+                  <input
+                    inputMode="numeric"
+                    value={price}
+                    onChange={(e) => setPrice(Number(e.target.value.replace(/\D/g, "")) || 0)}
+                    className="w-full bg-transparent text-[13px] font-bold text-text focus:outline-none"
+                  />
+                </span>
+              </label>
+            </div>
+          )}
+
+          <Button type="submit" className="w-full">
+            <Plus size={15} aria-hidden /> Add {total} seat{total === 1 ? "" : "s"} · row{rowCount === 1 ? "" : "s"} {firstLabel}
+            {rowCount > 1 ? `–${lastLabel}` : ""}
+          </Button>
+          <p className="text-[11px] leading-relaxed text-dim">
+            The seats appear below the chart and stay selected, so you can drag them where they belong. Add as many blocks as you need.
+          </p>
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+/** The stage marker: shown or hidden, renamed and resized. Dragging it on the chart moves it. */
+function StagePanel({ stage, onChange }: { stage: SeatLayout["stage"]; onChange: (stage: SeatLayout["stage"]) => void }) {
+  return (
+    <Panel className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-bold text-text">Stage</h2>
+        <Button variant="outline" size="sm" onClick={() => onChange(stage ? undefined : defaultStage())}>
+          {stage ? "Remove stage" : "Add a stage"}
+        </Button>
+      </div>
+      {stage ? (
+        <div className="mt-4 space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-muted">Label</span>
+            <input
+              value={stage.label}
+              maxLength={24}
+              onChange={(e) => onChange({ ...stage, label: e.target.value })}
+              className="h-10 w-full rounded-lg border border-line bg-surface-2 px-3 text-[13px] text-text focus:border-gold focus:outline-none"
+            />
+          </label>
+          <CommitRange label="Width" min={160} max={1300} step={10} value={stage.w} onCommit={(w) => onChange({ ...stage, w, x: Math.max(0, stage.x - (w - stage.w) / 2) })} />
+          <CommitRange label="Height" min={24} max={140} step={4} value={stage.h} onCommit={(h) => onChange({ ...stage, h })} />
+          <p className="text-[11px] leading-relaxed text-dim">Drag the stage on the chart to move it. Buyers see it so they know which way the room faces.</p>
+        </div>
+      ) : (
+        <p className="mt-3 text-[11px] leading-relaxed text-dim">No stage on the chart. Add one so buyers can tell which seats are close to it.</p>
+      )}
+    </Panel>
+  );
+}
+
+/** A slider that previews while it moves and only records one undo step when it is let go. */
+function CommitRange({ label, min, max, step, value, onCommit }: { label: string; min: number; max: number; step: number; value: number; onCommit: (v: number) => void }) {
+  const id = useId();
+  // While the handle is held the slider shows its own value; once let go it follows the stored one again.
+  const [held, setHeld] = useState<number | null>(null);
+  const v = held ?? value;
+  const done = () => {
+    if (held !== null && held !== value) onCommit(held);
+    setHeld(null);
+  };
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <label htmlFor={id} className="text-xs font-bold text-muted">
+          {label}
+        </label>
+        <span className="text-[11px] text-dim">{Math.round(v)}</span>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={v}
+        onChange={(e) => setHeld(Number(e.target.value))}
+        onPointerUp={done}
+        onKeyUp={done}
+        onBlur={done}
+        className="w-full accent-[#f7cb60]"
+      />
     </div>
   );
 }

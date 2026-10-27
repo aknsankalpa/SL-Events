@@ -1,6 +1,8 @@
 // Mock data used until the backend API exists. Shapes mirror what the API should return.
 // Everything marked "placeholder" was not specified in the Figma designs.
 
+import type { SeatChart } from "./seating";
+
 export type CategoryId =
   | "concert"
   | "party"
@@ -60,6 +62,8 @@ export type EventItem = {
   descriptionHtml?: string;
   organizer: string;
   /** The venue's seating chart, for events built from an uploaded plan. Coordinates are pixels of `imageUrl`. */
+  /** The seat chart buyers pick from, for numbered-seat events. Replaces `seatingPlan`. */
+  seatChart?: SeatChart;
   seatingPlan?: {
     imageUrl: string;
     width: number;
