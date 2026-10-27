@@ -108,6 +108,7 @@ export function TicketViewer({ event, bookingId, tickets }: Props) {
               {[
                 ["Name", ticket.holder],
                 ["Ticket", ticket.ticketName],
+                ...(ticket.seat ? [["Seat", ticket.seat]] : []),
                 ["Venue", event.venue],
                 ["Doors open", event.doorsOpen],
               ].map(([k, v]) => (
@@ -197,6 +198,7 @@ export function TicketViewer({ event, bookingId, tickets }: Props) {
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="text-[13px] font-bold text-text">
                       {t.holder} · {t.ticketName}
+                      {t.seat ? ` · Seat ${t.seat}` : ""}
                     </p>
                     <p className="mt-1 font-mono text-[11px] text-dim">{t.code}</p>
                   </div>

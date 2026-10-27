@@ -1,7 +1,7 @@
 // Mock data used until the backend API exists. Shapes mirror what the API should return.
 // Everything marked "placeholder" was not specified in the Figma designs.
 
-import type { SeatChart } from "./seating";
+import { chartFromSeatMap, gridToLayout, type SeatChart } from "./seating";
 
 export type CategoryId =
   | "concert"
@@ -61,16 +61,8 @@ export type EventItem = {
   /** Rich-text version of the description (sanitised on display). Present for organizer-written events. */
   descriptionHtml?: string;
   organizer: string;
-  /** The venue's seating chart, for events built from an uploaded plan. Coordinates are pixels of `imageUrl`. */
-  /** The seat chart buyers pick from, for numbered-seat events. Replaces `seatingPlan`. */
+  /** The seat chart buyers pick from, for numbered-seat events. */
   seatChart?: SeatChart;
-  seatingPlan?: {
-    imageUrl: string;
-    width: number;
-    height: number;
-    seats: { x: number; y: number; r: number; color: string }[];
-    legend: { name: string; color: string; price: number; seats: number }[];
-  };
   organizerAbout?: string;
   organizerEmail?: string;
   organizerPhone?: string;
@@ -100,7 +92,60 @@ const generalOnly = (name: string, price: number, capacity: number, sold: number
   { id: name.toLowerCase(), name, price, perks, capacity, sold },
 ];
 
+/**
+ * The seated demo event: a theatre with stalls, a balcony and couple seats, drawn with the same generator organizers use.
+ * Some of its seats are already held by the seed bookings in `bookings.ts`, so the picker has taken seats to show.
+ */
+const galaChart: SeatChart = (() => {
+  const built = gridToLayout(
+    [
+      { id: "odc", name: "Stalls", color: "#ece7dc", price: 30000, rows: "A to H", seatsPerRow: 16, aisleAfter: 8, numbering: "1 → 16", seatType: "Single" },
+      { id: "balcony", name: "Balcony", color: "#f7cb60", price: 45000, rows: "J to L", seatsPerRow: 16, aisleAfter: 8, numbering: "1 → 16", seatType: "Single" },
+      { id: "couple", name: "Couple", color: "#f28b82", price: 70000, rows: "M to M", seatsPerRow: 7, aisleAfter: 3, numbering: "1 → 16", seatType: "Couple" },
+    ],
+    ["H8", "H9"],
+    ["A1", "A16"],
+  );
+  return chartFromSeatMap({ template: "", sections: built.sections, blocked: [], accessible: [], layout: built.layout })!;
+})();
+
+/** One ticket type per section, so event cards and "from" prices work for seated events too. `sold` counts the seeded bookings. */
+function seatedTicketTypes(chart: SeatChart, sold: Record<string, number>): TicketType[] {
+  return chart.sections.map((sec) => ({
+    id: sec.id,
+    name: sec.name,
+    price: sec.price,
+    summary: "Numbered seats",
+    perks: ["Numbered seats you choose yourself"],
+    capacity: chart.seats.filter((s) => s.sectionId === sec.id && !s.blocked).length,
+    sold: sold[sec.id] ?? 0,
+  }));
+}
+
 export const events: EventItem[] = [
+  {
+    slug: "kandyan-dance-gala",
+    title: "Kandyan Dance Gala 2026",
+    category: "culture",
+    startsAt: "2026-12-19T18:30:00+09:00",
+    dateLabel: "Sat, Dec 19 · 6:30 PM",
+    longDate: "Sat, 19 Dec 2026",
+    time: "6:30 PM",
+    badgeDate: "DEC 19, 2026",
+    venue: "Ansan Arts Center, Main Hall",
+    city: "Ansan",
+    area: "Danwon-gu, Ansan",
+    tagline: "Choose your own seat · Dance · Live drumming",
+    description: [
+      "An evening of Kandyan, low-country and Sabaragamuwa dance by Sri Lankan dancers living in Korea, with live drumming.",
+      "Every seat is numbered. Pick the ones you like from the seat chart when you book.",
+    ],
+    organizer: "Lanka Beats Korea",
+    doorsOpen: "5:30 PM",
+    seatChart: galaChart,
+    ticketTypes: seatedTicketTypes(galaChart, { odc: 4, balcony: 2 }),
+    featured: true,
+  },
   {
     slug: "newcomers-meetup",
     title: "Newcomers Meetup",

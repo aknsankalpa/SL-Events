@@ -18,6 +18,9 @@ export type BookingStatus =
 /** What the customer sees about a payment, whatever the detailed booking status. */
 export type PaymentState = "pending" | "confirmed" | "failed" | "expired" | "cancelled";
 
+/** Most tickets (or seats) one booking may hold. The server must enforce the same limit. */
+export const MAX_PER_BOOKING = 10;
+
 export type BookingLine = { ticketName: string; qty: number; unitPrice: number };
 
 /** A seat a booking holds. `id` is the chart's seat id; `label` ("C12") is what the customer reads. */
@@ -104,12 +107,12 @@ export const customerCan = {
 };
 
 /** A booking whose payment window has closed. */
-export function isPastDeadline(b: Booking, nowMs: number): boolean {
+export function isPastDeadline(b: Pick<Booking, "status" | "payByIso">, nowMs: number): boolean {
   return (b.status === "awaiting_payment" || b.status === "proof_rejected") && !!b.payByIso && nowMs > new Date(b.payByIso).getTime();
 }
 
 /** The status to show right now: an unpaid booking past its deadline reads as expired. */
-export const effectiveStatus = (b: Booking, nowMs: number): BookingStatus => (nowMs > 0 && isPastDeadline(b, nowMs) ? "expired" : b.status);
+export const effectiveStatus = (b: Pick<Booking, "status" | "payByIso">, nowMs: number): BookingStatus => (nowMs > 0 && isPastDeadline(b, nowMs) ? "expired" : b.status);
 
 const KST = "Asia/Seoul";
 /** "Sat, 10 Oct, 1:10 PM" in Korea time. */
@@ -123,6 +126,50 @@ export function formatKst(iso: string): string {
 const DEMO = "kasun@example.com";
 
 export const seedBookings: Booking[] = [
+  // Other people's bookings for the seated demo event, so some of its seats are already taken.
+  {
+    id: "SL-41801",
+    ownerEmail: "nuwan@example.com",
+    eventSlug: "kandyan-dance-gala",
+    eventTitle: "Kandyan Dance Gala 2026",
+    eventDate: "19 Dec 2026",
+    status: "confirmed",
+    lines: [{ ticketName: "Stalls", qty: 4, unitPrice: 30000 }],
+    fee: 0,
+    total: 120000,
+    attendees: ["Nuwan Silva", "Kumari Silva", "Ruwan Silva", "Sithara Silva"],
+    seats: [
+      { id: "odc-C7", label: "C7" },
+      { id: "odc-C8", label: "C8" },
+      { id: "odc-C9", label: "C9" },
+      { id: "odc-C10", label: "C10" },
+    ],
+    paymentMethod: "Bank transfer",
+    createdIso: "2026-10-12T20:00:00+09:00",
+    createdAt: "Mon, 12 Oct, 8:00 PM",
+    verifiedAt: "2026-10-13T10:00:00+09:00",
+    verifiedBy: "Nimal Fernando",
+  },
+  {
+    id: "SL-41802",
+    ownerEmail: "tharindu@example.com",
+    eventSlug: "kandyan-dance-gala",
+    eventTitle: "Kandyan Dance Gala 2026",
+    eventDate: "19 Dec 2026",
+    status: "under_review",
+    lines: [{ ticketName: "Balcony", qty: 2, unitPrice: 45000 }],
+    fee: 0,
+    total: 90000,
+    attendees: ["Tharindu Jayasinghe", "Maleesha Jayasinghe"],
+    seats: [
+      { id: "balcony-J8", label: "J8" },
+      { id: "balcony-J9", label: "J9" },
+    ],
+    paymentMethod: "Bank transfer",
+    createdIso: "2026-10-20T09:00:00+09:00",
+    createdAt: "Tue, 20 Oct, 9:00 AM",
+    proof: { fileName: "receipt.png", uploadedAt: "9:20 AM", sizeLabel: "0.8 MB" },
+  },
   {
     id: "SL-41752",
     ownerEmail: DEMO,
@@ -290,7 +337,8 @@ export function eventForBooking(b: Booking): EventItem {
 }
 
 export function ticketSummary(b: Booking) {
-  return b.lines.map((l) => `${l.qty} × ${l.ticketName}`).join(", ");
+  const tickets = b.lines.map((l) => `${l.qty} × ${l.ticketName}`).join(", ");
+  return b.seats?.length ? `${tickets} · Seat${b.seats.length === 1 ? "" : "s"} ${b.seats.map((s) => s.label).join(", ")}` : tickets;
 }
 
 export const ticketCount = (b: Booking) => b.lines.reduce((n, l) => n + l.qty, 0);
@@ -314,6 +362,8 @@ export type IssuedTicket = {
   ticketName: string;
   /** True once the ticket has been scanned at the door. Only the entrance scanner changes this. */
   scanned: boolean;
+  /** Seat label ("C12") for numbered-seat events. */
+  seat?: string;
 };
 
 /** Codes already used by the organizer's mock attendee list. */
@@ -335,6 +385,7 @@ export function ticketsFor(b: Booking): IssuedTicket[] {
     holder: b.attendees[i] || b.attendees[0] || "Guest",
     ticketName,
     scanned: b.status === "attended",
+    seat: b.seats?.[i]?.label,
   }));
 }
 

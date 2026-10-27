@@ -11,9 +11,12 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { Checkbox, Field } from "@/components/ui/Field";
 import { useSession } from "@/components/auth/useSession";
 import { useOnline } from "@/components/layout/OfflineBanner";
+import { useTakenSeats } from "@/components/seats/useTakenSeats";
 import { customerActions } from "@/lib/bookingStore";
 import { currentUser, paymentAccount, ticketsLeft, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
+import { MAX_PER_BOOKING } from "@/lib/bookings";
+import { prepareSeatBooking, type ChartSeat } from "@/lib/seating";
 
 /** Parses `?tickets=general:2,vip:1` into ordered, validated lines. */
 function parseTickets(event: EventItem, raw: string | null) {
@@ -40,8 +43,31 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
   const online = useOnline();
   const fullName = user?.name ?? currentUser.fullName;
   const email = user?.email ?? currentUser.email;
-  const selection = useMemo(() => parseTickets(event, params.get("tickets")), [event, params]);
+  const chart = event.seatChart;
+  const taken = useTakenSeats(event.slug);
+  const seatParam = params.get("seats");
+  // For a numbered-seat event the seats in the link are checked again here; a seat taken since the chart was shown is caught.
+  const seatedNow = useMemo(
+    () => (chart ? prepareSeatBooking(chart, taken, (seatParam ?? "").split(",").map(decodeURIComponent).filter(Boolean), MAX_PER_BOOKING) : null),
+    [chart, taken, seatParam],
+  );
+  // Once the booking is placed its seats count as taken (by this very booking), so the checked selection is kept as it was.
+  const [frozen, setFrozen] = useState<typeof seatedNow>(null);
+  const seated = frozen ?? seatedNow;
+  const [problem, setProblem] = useState<string>();
 
+  const selection = useMemo(() => {
+    if (!chart) return parseTickets(event, params.get("tickets"));
+    if (!seated?.ok) return [];
+    // One entry per section, in the same order the seats are booked in.
+    return chart.sections.flatMap((sec) => {
+      const type = event.ticketTypes.find((t) => t.id === sec.id);
+      const qty = seated.seats.filter((s) => s.sectionId === sec.id).length;
+      return type && qty > 0 ? [{ type, qty }] : [];
+    });
+  }, [chart, seated, event, params]);
+
+  const seatList: ChartSeat[] = seated?.ok ? seated.seats : [];
   const attendeeSlots = selection.flatMap(({ type, qty }) => Array.from({ length: qty }, (_, i) => ({ type, key: `${type.id}-${i}` })));
   const [names, setNames] = useState<string[]>(() => attendeeSlots.map((_, i) => (i === 0 ? fullName : "")));
   const [promo, setPromo] = useState("");
@@ -53,10 +79,12 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
   if (selection.length === 0) {
     return (
       <div className="mx-auto max-w-site px-5 py-16 text-center">
-        <p className="text-base font-bold text-text">No tickets selected</p>
-        <p className="mt-2 text-sm text-muted">Choose your tickets first, then come back to review your booking.</p>
+        <p className="text-base font-bold text-text">{chart ? "No seats selected" : "No tickets selected"}</p>
+        <p className="mt-2 text-sm text-muted">
+          {chart && seated && !seated.ok && seatParam ? seated.message : `Choose your ${chart ? "seats" : "tickets"} first, then come back to review your booking.`}
+        </p>
         <LinkButton href={`/events/${event.slug}/book`} className="mt-6">
-          Choose tickets
+          {chart ? "Choose seats" : "Choose tickets"}
         </LinkButton>
       </div>
     );
@@ -64,12 +92,31 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
 
   const subtotal = selection.reduce((n, { type, qty }) => n + type.price * qty, 0);
   const total = subtotal + BOOKING_FEE;
-  const missingName = names.some((n) => !n.trim());
+  const missingName = attendeeSlots.some((_, i) => !names[i]?.trim());
   const canConfirm = agreeTerms && agreeData && !missingName;
 
   function confirm() {
     setSubmitted(true);
     if (!canConfirm || !user) return;
+    if (chart && seated?.ok) {
+      // TODO: POST the seats to the API, which holds them in one atomic step, then use the id it returns.
+      const result = customerActions.createSeatedBooking({
+        ownerEmail: user.email,
+        eventSlug: event.slug,
+        eventTitle: event.title,
+        eventDate: event.longDate.replace(/^w+, /, ""),
+        seatIds: seated.seats.map((s) => s.id),
+        fee: BOOKING_FEE,
+        attendees: attendeeSlots.map((_, i) => (names[i] ?? "").trim()),
+      });
+      if (!result.ok) {
+        setProblem(result.message);
+        return;
+      }
+      setFrozen(seated);
+      router.push(result.booking.status === "confirmed" ? `/bookings/${result.booking.id}` : `/bookings/${result.booking.id}/payment`);
+      return;
+    }
     // TODO: POST the booking to the API, which re-checks availability and limits, then use the id it returns.
     // The booking starts unpaid (or confirmed when there is nothing to pay). It is marked paid only by staff.
     const booking = customerActions.createBooking({
@@ -117,7 +164,7 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
             {attendeeSlots.map((slot, i) => (
               <Field
                 key={slot.key}
-                label={`Ticket ${i + 1} · ${slot.type.name}`}
+                label={seatList[i] ? `Seat ${seatList[i]!.label} · ${slot.type.name}` : `Ticket ${i + 1} · ${slot.type.name}`}
                 value={names[i] ?? ""}
                 onChange={(e) => setNames((prev) => prev.map((n, j) => (j === i ? e.target.value : n)))}
                 autoComplete="name"
@@ -274,6 +321,11 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
             Confirm booking
           </Button>
           {!online && <p role="alert" className="mt-3 text-center text-[11px] text-amber">You&apos;re offline. Reconnect to book.</p>}
+          {problem && (
+            <p role="alert" className="mt-3 text-center text-xs font-bold text-danger">
+              {problem} <Link href={`/events/${event.slug}/book`} className="underline">Choose seats</Link>
+            </p>
+          )}
           <p className="mt-3 text-center text-[11px] text-dim">{total === 0 ? "Free booking." : "Pay within 24 hours or the seats are released."}</p>
         </OrderSummary>
       </div>

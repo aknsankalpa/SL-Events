@@ -58,32 +58,6 @@ export function draftToEventItem(draft: EventDraft, id: string): EventItem {
 
   const city = draft.address.split(",").pop()?.trim() || draft.address;
 
-  const layout = draft.sellMode === "seats" ? draft.seatMap.layout : undefined;
-  const seatingPlan = layout
-    ? {
-        imageUrl: layout.imageUrl,
-        width: layout.width,
-        height: layout.height,
-        // Blocked seats are drawn muted so the dot in the original picture doesn't look like an available seat.
-        seats: layout.seats
-          .filter((s) => s.blocked || s.section)
-          .map((s) => ({
-            x: s.x,
-            y: s.y,
-            r: s.r,
-            color: s.blocked ? "#3a3631" : (draft.seatMap.sections.find((sec) => sec.id === s.section)?.color ?? "#ece7dc"),
-          })),
-        legend: draft.seatMap.sections
-          .map((sec) => ({
-            name: sec.name,
-            color: sec.color,
-            price: sec.price,
-            seats: seatMapSectionStats(draft.seatMap, sec).free,
-          }))
-          .filter((l) => l.seats > 0),
-      }
-    : undefined;
-
   return {
     slug: id,
     title: draft.name.trim() || "Untitled event",
@@ -99,7 +73,6 @@ export function draftToEventItem(draft: EventDraft, id: string): EventItem {
     tagline: draft.tags,
     description: paragraphs.length ? paragraphs : ["No description yet."],
     descriptionHtml: isEmptyHtml(draft.description) ? undefined : draft.description,
-    seatingPlan,
     seatChart: draft.sellMode === "seats" ? chartFromSeatMap(draft.seatMap) : undefined,
     organizer: draft.organizerName?.trim() || organizer.org,
     organizerAbout: draft.organizerAbout?.trim() || undefined,

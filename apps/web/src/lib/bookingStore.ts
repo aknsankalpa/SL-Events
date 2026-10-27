@@ -1,13 +1,18 @@
 import {
   customerCan,
+  effectiveStatus,
   formatKst,
+  MAX_PER_BOOKING,
   paymentRules,
   seedBookings,
   type Booking,
   type BookingLine,
+  type BookingSeat,
   type BookingStatus,
 } from "./bookings";
+import { getEvent } from "./data";
 import { createPersistedStore } from "./persistedStore";
+import { prepareSeatBooking, takenSeatIds } from "./seating";
 
 /**
  * The live list of bookings, kept in this browser until the API exists.
@@ -51,6 +56,9 @@ function normalize(stored: unknown): Booking[] {
         fee: num(b.fee),
         total,
         attendees: Array.isArray(b.attendees) ? b.attendees.map(str) : [],
+        seats: Array.isArray(b.seats)
+          ? b.seats.filter(isRecord).map((s): BookingSeat => ({ id: str(s.id), label: str(s.label) })).filter((s) => s.id)
+          : undefined,
         paymentMethod: b.paymentMethod === "—" ? "—" : "Bank transfer",
         createdIso: str(b.createdIso) || undefined,
         createdAt: str(b.createdAt) || undefined,
@@ -88,7 +96,11 @@ export type NewBooking = {
   lines: BookingLine[];
   fee: number;
   attendees: string[];
+  seats?: BookingSeat[];
 };
+
+/** What a seated booking needs from the screen: the chosen seat ids, and a name for each seat in booking order. */
+export type NewSeatedBooking = Omit<NewBooking, "lines" | "seats" | "fee"> & { seatIds: string[]; fee?: number };
 
 export type ProofInput = { fileName: string; sizeLabel: string; sender: string; bank: string };
 
@@ -118,6 +130,31 @@ export const customerActions = {
     };
     bookingStore.update((list) => [booking, ...list]);
     return booking;
+  },
+
+  /**
+   * Places a booking for chosen seats. The seats are checked again against what is taken right now, so two people
+   * can't hold the same seat. (In this browser-only mock that is the best that can be done; the API must do it in one
+   * atomic step.) The seats are held for the payment window like any unpaid booking.
+   */
+  createSeatedBooking(input: NewSeatedBooking): { ok: true; booking: Booking } | { ok: false; message: string } {
+    const chart = getEvent(input.eventSlug)?.seatChart;
+    if (!chart) return { ok: false, message: "This event has no seat chart." };
+    const now = Date.now();
+    const taken = takenSeatIds(bookingStore.getSnapshot(), input.eventSlug, (b) => effectiveStatus(b, now));
+    const prepared = prepareSeatBooking(chart, taken, input.seatIds, MAX_PER_BOOKING);
+    if (!prepared.ok) return { ok: false, message: prepared.message };
+    const booking = customerActions.createBooking({
+      ownerEmail: input.ownerEmail,
+      eventSlug: input.eventSlug,
+      eventTitle: input.eventTitle,
+      eventDate: input.eventDate,
+      attendees: input.attendees,
+      fee: input.fee ?? 0,
+      lines: prepared.lines,
+      seats: prepared.seats.map((s) => ({ id: s.id, label: s.label })),
+    });
+    return { ok: true, booking };
   },
 
   /** Sends payment proof for checking. The booking moves to "under review"; it does not become paid. */

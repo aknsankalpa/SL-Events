@@ -350,6 +350,38 @@ export function linesForSeats(chart: SeatChart, seats: readonly ChartSeat[]): { 
   return [...out.values()];
 }
 
+/** Seats in the order a booking lists them: by section as drawn on the chart, then row, then number. */
+export function orderSeats(chart: SeatChart, seats: readonly ChartSeat[]): ChartSeat[] {
+  const sectionAt = new Map(chart.sections.map((s, i) => [s.id, i] as const));
+  return [...seats].sort(
+    (a, b) => (sectionAt.get(a.sectionId) ?? 0) - (sectionAt.get(b.sectionId) ?? 0) || rowIndex(a.row) - rowIndex(b.row) || a.num - b.num,
+  );
+}
+
+export type SeatBooking = {
+  /** The chosen seats in booking order. `attendees` and `seats` on the booking follow this order. */
+  seats: ChartSeat[];
+  lines: { ticketName: string; qty: number; unitPrice: number }[];
+  total: number;
+};
+
+/**
+ * Checks a selection and turns it into what a booking stores: ordered seats and one line per section. The same call
+ * runs on the review page and again just before the booking is created, so a seat taken in between is caught.
+ */
+export function prepareSeatBooking(
+  chart: SeatChart,
+  taken: ReadonlySet<string>,
+  ids: readonly string[],
+  max: number,
+): ({ ok: true } & SeatBooking) | { ok: false; message: string } {
+  const checked = validateSelection(chart, taken, ids, max);
+  if (!checked.ok) return { ok: false, message: checked.message };
+  const seats = orderSeats(chart, checked.seats);
+  const lines = linesForSeats(chart, seats).map(({ ticketName, qty, unitPrice }) => ({ ticketName, qty, unitPrice }));
+  return { ok: true, seats, lines, total: checked.total };
+}
+
 /* ---------- Counting ---------- */
 
 export function chartStats(chart: SeatChart, taken: ReadonlySet<string>) {

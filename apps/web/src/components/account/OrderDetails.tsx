@@ -89,6 +89,7 @@ export function OrderDetails({ booking: b, event }: { booking: Booking; event: E
               {b.attendees.map((name, i) => (
                 <li key={`${name}-${i}`} className="rounded-lg border border-line bg-surface-2 px-4 py-3 text-[13px] text-text">
                   {name || "Name to be added"}
+                  {b.seats?.[i] && <span className="ml-2 text-dim">· Seat {b.seats[i]!.label}</span>}
                 </li>
               ))}
             </ul>

@@ -3,7 +3,7 @@ import { CheckCircle2, CalendarDays, ChevronRight, Globe, Landmark, Mail, MapPin
 import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
 import { EventTicketsCard } from "@/components/events/EventTicketsCard";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
-import { SeatPlanView } from "@/components/events/SeatPlanView";
+import { SeatChartSection } from "@/components/seats/SeatChartSection";
 import { RichText } from "@/components/ui/RichText";
 import { Badge } from "@/components/ui/StatusBadge";
 import { naverMapUrl } from "@/lib/calendar";
@@ -125,9 +125,9 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
             </div>
           </Section>
 
-          {event.seatingPlan && (
-            <Section title="Seating plan">
-              <SeatPlanView plan={event.seatingPlan} />
+          {event.seatChart && (
+            <Section title="Seat chart">
+              <SeatChartSection chart={event.seatChart} slug={event.slug} preview={preview} />
             </Section>
           )}
 
