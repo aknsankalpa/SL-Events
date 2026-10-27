@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { customerActions } from "@core/bookingStore";
 import { getEvent, ticketsLeft } from "@core/data";
 import { formatKrw } from "@core/format";
+import { prepareSeatBooking } from "@core/seating";
 import { useSession } from "@/lib/hooks";
+import { SeatPicker } from "@/seats/SeatPicker";
+import { useTakenSeats } from "@/seats/useTakenSeats";
 import { BOOKING_FEE, MAX_TICKETS } from "@/lib/rules";
 import { Button } from "@/ui/Button";
 import { Card, Row } from "@/ui/Card";
@@ -48,9 +51,23 @@ export default function Book() {
 
   // Start with two tickets of the first type that has them, like the website.
   const [qty, setQty] = useState<Record<string, number>>(() => {
-    const first = event?.ticketTypes.find((t) => ticketsLeft(t) >= 2);
+    const first = event?.seatChart ? undefined : event?.ticketTypes.find((t) => ticketsLeft(t) >= 2);
     return first ? { [first.id]: 2 } : {};
   });
+
+  // Numbered-seat events: the seats are chosen on the chart instead of by quantity.
+  const chart = event?.seatChart;
+  const taken = useTakenSeats(slug ?? "");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [problem, setProblem] = useState<string>();
+  const preparedNow = useMemo(
+    () => (chart ? prepareSeatBooking(chart, taken, picked.filter((id) => !taken.has(id)), MAX_TICKETS) : null),
+    [chart, taken, picked],
+  );
+  // Once the booking is placed its seats count as taken (by this very booking), so keep the checked selection as it was.
+  const [frozen, setFrozen] = useState<typeof preparedNow>(null);
+  const prepared = frozen ?? preparedNow;
+  const seated = prepared && prepared.ok ? prepared : null;
   const [step, setStep] = useState<"tickets" | "review">("tickets");
   const [names, setNames] = useState<string[]>([]);
   const [terms, setTerms] = useState(true);
@@ -71,11 +88,19 @@ export default function Book() {
     );
   }
 
-  const selection = event.ticketTypes.filter((t) => (qty[t.id] ?? 0) > 0).map((t) => ({ type: t, qty: qty[t.id]! }));
+  const selection = chart
+    ? chart.sections.flatMap((sec) => {
+        const type = event.ticketTypes.find((t) => t.id === sec.id);
+        const n = seated ? seated.seats.filter((s) => s.sectionId === sec.id).length : 0;
+        return type && n > 0 ? [{ type, qty: n }] : [];
+      })
+    : event.ticketTypes.filter((t) => (qty[t.id] ?? 0) > 0).map((t) => ({ type: t, qty: qty[t.id]! }));
   const count = selection.reduce((n, s) => n + s.qty, 0);
   const subtotal = selection.reduce((n, s) => n + s.type.price * s.qty, 0);
   const total = subtotal + BOOKING_FEE;
-  const slots = selection.flatMap(({ type, qty: q }) => Array.from({ length: q }, (_, i) => `${type.name} ${i + 1}`));
+  const slots = seated
+    ? seated.seats.map((s) => `Seat ${s.label} · ${chart?.sections.find((sec) => sec.id === s.sectionId)?.name ?? ""}`)
+    : selection.flatMap(({ type, qty: q }) => Array.from({ length: q }, (_, i) => `${type.name} ${i + 1}`));
   const nameAt = (i: number) => names[i] ?? (i === 0 ? user.name : "");
   const missing = slots.some((_, i) => !nameAt(i).trim());
 
@@ -87,9 +112,36 @@ export default function Book() {
     });
   }
 
+  function toggleSeat(id: string) {
+    setProblem(undefined);
+    if (picked.includes(id)) setPicked(picked.filter((x) => x !== id));
+    else if (picked.length >= MAX_TICKETS) setProblem(`You can book up to ${MAX_TICKETS} seats at a time.`);
+    else setPicked([...picked, id]);
+  }
+
   function confirm() {
     setSubmitted(true);
     if (!terms || missing || !user) return;
+    if (chart && seated) {
+      // TODO: POST the seats to the API, which holds them in one atomic step, then use the id it returns.
+      const result = customerActions.createSeatedBooking({
+        ownerEmail: user.email,
+        eventSlug: event!.slug,
+        eventTitle: event!.title,
+        eventDate: event!.longDate.replace(/^\w+, /, ""),
+        seatIds: seated.seats.map((s) => s.id),
+        fee: BOOKING_FEE,
+        attendees: slots.map((_, i) => nameAt(i).trim()),
+      });
+      if (!result.ok) {
+        setProblem(result.message);
+        setStep("tickets");
+        return;
+      }
+      setFrozen(prepared);
+      router.replace(`/booking/${result.booking.id}` as never);
+      return;
+    }
     // TODO: POST the booking to the API, which re-checks availability and limits, then use the id it returns.
     // The booking starts unpaid (or confirmed when there is nothing to pay). It is marked paid only by staff.
     const booking = customerActions.createBooking({
@@ -117,7 +169,49 @@ export default function Book() {
           </Text>
         </View>
 
-        {step === "tickets" ? (
+        {step === "tickets" && chart ? (
+          <>
+            <SeatPicker
+              chart={chart}
+              taken={taken}
+              selected={picked.filter((id) => !taken.has(id))}
+              onToggle={toggleSeat}
+              onSelectMany={(ids) => {
+                setProblem(undefined);
+                setPicked(ids.slice(0, MAX_TICKETS));
+              }}
+              max={MAX_TICKETS}
+            />
+            {seated && seated.seats.length > 0 && (
+              <Card style={{ gap: 10 }}>
+                <Text variant="heading">Your seats</Text>
+                {seated.seats.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove seat ${s.label}`}
+                    onPress={() => toggleSeat(s.id)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 40 }}
+                  >
+                    <Text>
+                      {s.label}
+                      <Text color={colors.dim}> · {chart.sections.find((sec) => sec.id === s.sectionId)?.name}</Text>
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <Text variant="small" color={colors.muted}>
+                        {formatKrw(chart.sections.find((sec) => sec.id === s.sectionId)?.price ?? 0)}
+                      </Text>
+                      <Ionicons name="close-circle-outline" size={20} color={colors.dim} />
+                    </View>
+                  </Pressable>
+                ))}
+              </Card>
+            )}
+            <Text variant="small" color={problem ? colors.warning : colors.dim} accessibilityLiveRegion="polite">
+              {problem ?? `Up to ${MAX_TICKETS} seats per booking. Seats are held for 24 hours while you pay.`}
+            </Text>
+          </>
+        ) : step === "tickets" ? (
           <>
             {event.ticketTypes.map((t) => {
               const left = ticketsLeft(t);
@@ -156,7 +250,7 @@ export default function Book() {
                 Enter the name for each ticket. It must match the ID shown at the door.
               </Text>
               {slots.map((label, i) => (
-                <Field key={label} label={`Ticket ${i + 1} · ${label.replace(/ \d+$/, "")}`} value={nameAt(i)} onChangeText={(v) => setNames((cur) => { const next = slots.map((_, j) => cur[j] ?? (j === 0 ? user.name : "")); next[i] = v; return next; })} autoCapitalize="words" error={submitted && !nameAt(i).trim() ? "Enter the name for this ticket." : undefined} />
+                <Field key={label} label={seated ? label : `Ticket ${i + 1} · ${label.replace(/ \d+$/, "")}`} value={nameAt(i)} onChangeText={(v) => setNames((cur) => { const next = slots.map((_, j) => cur[j] ?? (j === 0 ? user.name : "")); next[i] = v; return next; })} autoCapitalize="words" error={submitted && !nameAt(i).trim() ? "Enter the name for this ticket." : undefined} />
               ))}
             </Card>
 
@@ -201,7 +295,7 @@ export default function Book() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
           <View>
             <Text variant="caption" color={colors.dim}>
-              {count} {count === 1 ? "ticket" : "tickets"}
+              {count} {chart ? (count === 1 ? "seat" : "seats") : count === 1 ? "ticket" : "tickets"}
             </Text>
             <Text variant="heading">{formatKrw(total)}</Text>
           </View>

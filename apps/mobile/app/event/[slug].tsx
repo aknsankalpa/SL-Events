@@ -3,6 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { categories, fromPrice, getEvent, ticketsLeft } from "@core/data";
 import { formatKrw, formatPrice } from "@core/format";
+import { SeatPicker } from "@/seats/SeatPicker";
+import { useTakenSeats } from "@/seats/useTakenSeats";
 import { naverMapUrl } from "@core/calendar";
 import { htmlToParagraphs, openUrl, shareText } from "@/lib/rules";
 import { Badge } from "@/ui/Badge";
@@ -36,6 +38,7 @@ function Info({ icon, title, sub, onPress }: { icon: keyof typeof Ionicons.glyph
 export default function EventDetails() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const event = getEvent(slug);
+  const taken = useTakenSeats(slug ?? "");
 
   if (!event) {
     return (
@@ -81,6 +84,13 @@ export default function EventDetails() {
             ))}
           </View>
 
+          {event.seatChart && (
+            <View style={{ gap: 10 }}>
+              <Text variant="heading">Seat chart</Text>
+              <SeatPicker chart={event.seatChart} taken={taken} selected={[]} />
+            </View>
+          )}
+
           <View style={{ gap: 10 }}>
             <Text variant="heading">Tickets</Text>
             {event.ticketTypes.map((t) => {
@@ -120,7 +130,7 @@ export default function EventDetails() {
             </Text>
             <Text variant="heading">{price.replace("From ", "")}</Text>
           </View>
-          <Button title={soldOut ? "Sold out" : "Book tickets"} disabled={soldOut} onPress={() => router.push(`/book/${event.slug}` as never)} style={{ flex: 1 }} />
+          <Button title={soldOut ? "Sold out" : event.seatChart ? "Choose seats" : "Book tickets"} disabled={soldOut} onPress={() => router.push(`/book/${event.slug}` as never)} style={{ flex: 1 }} />
         </View>
       </StickyBar>
     </View>

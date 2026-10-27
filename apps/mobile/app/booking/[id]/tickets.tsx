@@ -100,6 +100,11 @@ export default function Tickets() {
             <Text variant="small" color={colors.muted}>
               {t.ticketName} · Booking {booking.id}
             </Text>
+            {t.seat && (
+              <Text variant="heading" color={colors.gold}>
+                Seat {t.seat}
+              </Text>
+            )}
           </View>
         </View>
       </View>
