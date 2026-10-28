@@ -4,6 +4,7 @@ import { CategoryIcon } from "@/components/events/CategoryIcon";
 import { CustomerHome } from "@/components/home/CustomerHome";
 import { EventsNearYou } from "@/components/home/EventsNearYou";
 import { HomeIntro } from "@/components/home/HomeIntro";
+import { SplashGate } from "@/components/splash/SplashGate";
 import { ExploreBanner, FeaturedEvents, PopularOrganizers } from "@/components/home/HomeSections";
 import { categories } from "@/lib/data";
 
@@ -17,6 +18,7 @@ const steps = [
 export default function HomePage() {
   return (
     <>
+      <SplashGate />
       <HomeIntro />
 
       {/* Signed-in customers only: their tickets and recommendations. Renders nothing for visitors. */}
