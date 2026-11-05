@@ -6,7 +6,11 @@ import { EventsNearYou } from "@/components/home/EventsNearYou";
 import { HomeIntro } from "@/components/home/HomeIntro";
 import { SplashGate } from "@/components/splash/SplashGate";
 import { ExploreBanner, FeaturedEvents, PopularOrganizers } from "@/components/home/HomeSections";
-import { categories } from "@/lib/data";
+import { LatestEventsStack } from "@/components/home/LatestEventsStack";
+import { categories, events } from "@/lib/data";
+
+/** The next events by date, for the stack at the top of the home page. */
+const latestEvents = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, 6);
 
 const steps = [
   { n: "01", title: "Choose tickets", body: "Pick an event, a ticket type and how many you need.", Icon: Ticket },
@@ -23,6 +27,8 @@ export default function HomePage() {
 
       {/* Signed-in customers only: their tickets and recommendations. Renders nothing for visitors. */}
       <CustomerHome />
+
+      <LatestEventsStack events={latestEvents} />
 
       <section id="categories" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
