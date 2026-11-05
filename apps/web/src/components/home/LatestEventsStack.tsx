@@ -97,11 +97,11 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
   }
 
   return (
-    // The whole section is the stack: no heading or buttons around it. It keeps the old Featured section's anchor.
-    <section id="featured" aria-roledescription="carousel" aria-label="Latest events" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
+    // Just the stack: no heading or buttons around it. It fills the right side of the home page's hero.
+    <div role="region" aria-roledescription="carousel" aria-label="Latest events">
       {/* Only the front card can be reached with a keyboard or a screen reader. Left and right arrows change the card. */}
       <div
-        className="relative mx-auto h-[29rem] w-full max-w-md select-none pt-8"
+        className="relative mx-auto h-[29rem] w-full max-w-md select-none pt-8 lg:mr-0"
         onMouseEnter={() => setHold(true)}
         onMouseLeave={() => setHold(false)}
         onFocus={() => setHold(true)}
@@ -157,7 +157,7 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
       <p className="sr-only" aria-live="polite">
         Showing {current.title}
       </p>
-    </section>
+    </div>
   );
 }
 

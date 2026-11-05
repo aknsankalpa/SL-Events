@@ -1,15 +1,15 @@
-import { ArrowRight, CalendarDays, MapPin, Search, Sparkles } from "lucide-react";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { ArrowRight, MapPin, Search } from "lucide-react";
+import { LatestEventsStack } from "@/components/home/LatestEventsStack";
 import { LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { Badge } from "@/components/ui/StatusBadge";
-import { citiesWithEvents, events, fromPrice } from "@/lib/data";
-import { formatPrice } from "@/lib/format";
-import { featuredEvents, organizerProfiles, ticketsLeftTotal } from "@/lib/organizers";
+import { citiesWithEvents, events } from "@/lib/data";
+import { organizerProfiles } from "@/lib/organizers";
 
-/** The home page for visitors who aren't signed in: search, a clear way into the events, and one featured event. */
+/** The next events by date, shown as the stack of cards beside the welcome text. */
+const latestEvents = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, 6);
+
+/** The home page for visitors who aren't signed in: search, a clear way into the events, and the latest events as stacked cards. */
 export function PublicHero() {
-  const featured = featuredEvents[0];
 
   return (
     <section className="bg-hero-glow">
@@ -91,38 +91,7 @@ export function PublicHero() {
           </dl>
         </div>
 
-        {featured && (
-          <article className="overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl shadow-black/50">
-            <div className={`relative flex h-36 items-center justify-center bg-gradient-to-br ${coverGradients[featured.category]}`}>
-              <span className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-gold/40 bg-black/60 px-2.5 py-1 text-[10px] font-bold uppercase text-gold">
-                <Sparkles size={11} aria-hidden /> Featured
-              </span>
-              <CategoryIcon id={featured.category} size={56} strokeWidth={1.5} className={coverIconClass(featured.category)} />
-            </div>
-            <div className="space-y-3 p-6">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber">{featured.badgeDate}</p>
-                <Badge tone={ticketsLeftTotal(featured) <= 20 ? "danger" : "success"}>{ticketsLeftTotal(featured)} tickets left</Badge>
-              </div>
-              <h2 className="text-2xl font-bold text-text">{featured.title}</h2>
-              <p className="flex items-center gap-2 text-[13px] text-muted">
-                <CalendarDays size={14} aria-hidden /> {featured.dateLabel}
-              </p>
-              <p className="flex items-center gap-2 text-[13px] text-muted">
-                <MapPin size={14} aria-hidden /> {featured.venue}, {featured.city}
-              </p>
-              <div className="flex items-end justify-between gap-4 pt-2">
-                <div>
-                  <p className="text-xs text-dim">Tickets from</p>
-                  <p className="text-lg font-bold text-text">{formatPrice(fromPrice(featured))}</p>
-                </div>
-                <LinkButton href={`/events/${featured.slug}`} size="sm">
-                  View event <ArrowRight size={14} aria-hidden />
-                </LinkButton>
-              </div>
-            </div>
-          </article>
-        )}
+        <LatestEventsStack events={latestEvents} />
       </div>
     </section>
   );
