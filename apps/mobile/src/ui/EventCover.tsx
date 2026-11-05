@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, View, type ImageSourcePropType } from "react-native";
+import { AccessibilityInfo, Animated, Easing, Platform, View, type ImageSourcePropType } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { CategoryId } from "@core/data";
 import { coverColors } from "@/theme";
+
+/** The native animation driver doesn't exist in the browser preview. */
+const NATIVE_DRIVER = Platform.OS !== "web";
 
 const art: Record<CategoryId, ImageSourcePropType> = {
   concert: require("../../assets/categories/concert.png"),
@@ -48,8 +51,8 @@ function CategoryArt({ category, size }: { category: CategoryId; size: number })
     const swing = (value: Animated.Value, ms: number) =>
       Animated.loop(
         Animated.sequence([
-          Animated.timing(value, { toValue: 1, duration: ms, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(value, { toValue: 0, duration: ms, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(value, { toValue: 1, duration: ms, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE_DRIVER }),
+          Animated.timing(value, { toValue: 0, duration: ms, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE_DRIVER }),
         ]),
       );
     const a = swing(float, 2100);

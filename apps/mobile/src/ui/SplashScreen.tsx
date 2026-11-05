@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Image, StyleSheet, View } from "react-native";
+import { Animated, Easing, Image, Platform, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "@/ui/Text";
 import { colors } from "@/theme";
+
+/** The native animation driver doesn't exist in the browser preview. */
+const NATIVE_DRIVER = Platform.OS !== "web";
 
 /** How long the splash stays before it fades away. The website's splash uses about the same. */
 const SHOW_MS = 2400;
@@ -19,7 +22,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     Animated.timing(progress, { toValue: 1, duration: SHOW_MS - 200, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     const fade = setTimeout(() => {
-      Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => finished && onDone());
+      Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: NATIVE_DRIVER }).start(({ finished }) => finished && onDone());
     }, SHOW_MS);
     return () => clearTimeout(fade);
   }, [progress, opacity, onDone]);
