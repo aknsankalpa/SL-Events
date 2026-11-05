@@ -686,6 +686,12 @@ export function ImageSeatMapBuilder() {
 
   const assignSelected = (id: string) => change((s) => ({ ...s, section: id }));
 
+  /** Chooses every seat of a section, so it can be moved, blocked, re-numbered or handed to another section in one go. */
+  function selectSection(id: string) {
+    setTool("select");
+    setSelected(new Set(layout.seats.filter((s) => s.section === id).map((s) => s.uid)));
+  }
+
   // Seats can be removed (undo, re-detect) after the check ran, so only count dots that still exist.
   const strayList = layout.seats.filter((s) => strays.has(s.uid));
   const strayReasons = [...new Set(strayList.map((s) => strayReasonLabel[strays.get(s.uid)!]))];
@@ -1333,14 +1339,24 @@ export function ImageSeatMapBuilder() {
                         {st.free} seat{st.free === 1 ? "" : "s"}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      disabled={!selectedCount}
-                      onClick={() => assignSelected(s.id)}
-                      className="mt-2 h-9 w-full rounded-md border border-line text-xs font-bold text-text transition-colors hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:focus-ring"
-                    >
-                      Put selected seats here
-                    </button>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={st.total === 0}
+                        onClick={() => selectSection(s.id)}
+                        className="h-9 rounded-md border border-line text-xs font-bold text-text transition-colors hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:focus-ring"
+                      >
+                        Select its {st.total} seat{st.total === 1 ? "" : "s"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!selectedCount}
+                        onClick={() => assignSelected(s.id)}
+                        className="h-9 rounded-md border border-line text-xs font-bold text-text transition-colors hover:border-gold/50 hover:text-gold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:focus-ring"
+                      >
+                        Put selected here
+                      </button>
+                    </div>
                   </li>
                 );
               })}

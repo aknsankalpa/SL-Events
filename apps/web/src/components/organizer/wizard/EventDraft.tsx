@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
   capacityOf,
   parseRows,
@@ -59,8 +59,25 @@ type Ctx = { draft: EventDraft; setDraft: Dispatch<SetStateAction<EventDraft>>; 
 
 const DraftCtx = createContext<Ctx | null>(null);
 
-export function EventDraftProvider({ children }: { children: ReactNode }) {
-  const [draft, setDraft] = useState<EventDraft>(initial);
+/**
+ * Holds the draft being edited. The wizard starts from a blank sample; the event editor passes the saved draft as
+ * `initialDraft` and hears about every change through `onChange`.
+ */
+export function EventDraftProvider({
+  children,
+  initialDraft,
+  onChange,
+}: {
+  children: ReactNode;
+  initialDraft?: EventDraft;
+  onChange?: (draft: EventDraft) => void;
+}) {
+  const [draft, setDraft] = useState<EventDraft>(initialDraft ?? initial);
+  useEffect(() => {
+    onChange?.(draft);
+    // Only a new draft is news; a new callback function is not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
   const value = useMemo<Ctx>(
     () => ({ draft, setDraft, patch: (p) => setDraft((d) => ({ ...d, ...p })) }),
     [draft],

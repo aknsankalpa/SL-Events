@@ -23,7 +23,11 @@ import { Field } from "@/components/ui/Field";
 import { RichTextEditor } from "@/components/ui/RichTextEditorLazy";
 import { Badge } from "@/components/ui/StatusBadge";
 import { fileToCoverDataUrl } from "@/lib/image";
-import { changeHistory, eventCategories, eventStatusLabel, formatEventDate, type OrganizerEvent } from "@/lib/organizer";
+import { bookingStore } from "@/lib/bookingStore";
+import { changeHistory, eventCategories, eventStatusLabel, formatEventDate, seatMapSectionStats, type EventDraft, type OrganizerEvent } from "@/lib/organizer";
+import { takenSeatIds } from "@/lib/seating";
+import { EventDraftProvider } from "./wizard/EventDraft";
+import { SeatMapEditor } from "./wizard/SeatMapEditor";
 import { useOrganizer } from "./OrganizerContext";
 import { Dialog, OrgPageHeader, Panel } from "./ui";
 import { Select } from "@/components/ui/Select";
@@ -160,6 +164,12 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
     url: event.draft?.coverUrl ?? "",
   });
   const [coverError, setCoverError] = useState<string>();
+  // The seat map of a saved seated event can be changed here too. `seatMap` follows the editor; `seatBaseline` is what is saved.
+  const seated = event.draft?.sellMode === "seats";
+  const [seatMap, setSeatMap] = useState(event.draft?.seatMap);
+  const [seatBaseline, setSeatBaseline] = useState(event.draft?.seatMap);
+  const seatsChanged = seatMap !== seatBaseline;
+  const [seatError, setSeatError] = useState<string>();
 
   useEffect(() => {
     if (!toast) return;
@@ -176,7 +186,7 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
     address: form.address !== baseline.address,
   };
   const sensitive = Object.values(changed).some(Boolean);
-  const dirty = sensitive || (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== baseline[k]);
+  const dirty = sensitive || seatsChanged || (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== baseline[k]);
 
   // Pre-write the buyer message from what actually changed, until the organizer edits it.
   const autoMessage = useMemo(() => {
@@ -197,10 +207,22 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
   ];
 
   function save() {
+    // Seats that customers already hold can't be taken away or blocked: their bookings point at them.
+    if (seated && seatsChanged && seatMap) {
+      const held = takenSeatIds(bookingStore.getSnapshot(), id);
+      const sellable = new Set((seatMap.layout?.seats ?? []).filter((s) => s.section && !s.blocked).map((s) => s.uid));
+      const lost = [...held].filter((seatId) => !sellable.has(seatId));
+      if (lost.length > 0) {
+        setSeatError(`${lost.length} seat${lost.length === 1 ? " is" : "s are"} already booked, so ${lost.length === 1 ? "it" : "they"} can't be deleted, blocked or left without a section. Put ${lost.length === 1 ? "it" : "them"} back and save again.`);
+        return;
+      }
+    }
+    setSeatError(undefined);
     // TODO: persist through the API and queue the notification email when `notify` is on.
     const patch: Partial<OrganizerEvent> = { title: form.name.trim() || event.title };
     if (event.draft) {
-      patch.draft = { ...event.draft, ...form, coverUrl: cover.url, coverName: cover.url ? cover.name : "" };
+      patch.draft = { ...event.draft, ...form, ...(seatMap ? { seatMap } : {}), coverUrl: cover.url, coverName: cover.url ? cover.name : "" };
+      if (seated && seatMap) patch.capacity = seatMap.sections.reduce((n, sec) => n + seatMapSectionStats(seatMap, sec).free, 0);
       patch.dateLabel = formatEventDate(form.date);
       patch.shortDate = patch.dateLabel;
       patch.startsAt = form.date ? `${form.date}T${form.starts || "18:00"}:00+09:00` : undefined;
@@ -208,6 +230,7 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
     }
     updateEvent(id, patch);
     setBaseline(form);
+    setSeatBaseline(seatMap);
     setToast(
       sensitive && notify
         ? `Saved. ${event.sold} ticket holders will be emailed about the change.`
@@ -243,8 +266,8 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
           <span aria-current="page" className="-mb-px border-b-2 border-amber px-3 py-2.5 text-[13px] font-bold text-gold">
             Details
           </span>
-          <Link href="/organizer/ticket-types" className="px-3 py-2.5 text-[13px] font-bold text-muted hover:text-text">
-            Tickets &amp; seating
+          <Link href={seated ? "#seat-map" : "/organizer/ticket-types"} className="px-3 py-2.5 text-[13px] font-bold text-muted hover:text-text">
+            {seated ? "Seat map" : "Tickets & seating"}
           </Link>
           <Link href="/organizer/pricing" className="px-3 py-2.5 text-[13px] font-bold text-muted hover:text-text">
             Pricing
@@ -494,6 +517,35 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
           </section>
         </div>
       </div>
+
+      {seated && event.draft && (
+        <section id="seat-map" aria-label="Seat map" className="mt-5 scroll-mt-24">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-text">Seat map</h2>
+              <p className="mt-1 text-xs text-dim">
+                Change sections, prices, colours and seats. Press Save changes (above) to keep them. Price changes do not affect bookings already made.
+              </p>
+            </div>
+            {seatsChanged && <Badge tone="warning">Unsaved seat changes</Badge>}
+          </div>
+          {event.sold > 0 && (
+            <p className="mb-4 flex items-start gap-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-text">
+              <AlertTriangle size={16} aria-hidden className="mt-0.5 shrink-0 text-danger" />
+              Seats that are already booked can&apos;t be deleted, blocked or taken out of their section.
+            </p>
+          )}
+          {seatError && (
+            <p role="alert" className="mb-4 flex items-start gap-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-text">
+              <AlertTriangle size={16} aria-hidden className="mt-0.5 shrink-0 text-danger" />
+              {seatError}
+            </p>
+          )}
+          <EventDraftProvider initialDraft={event.draft as EventDraft} onChange={(d) => setSeatMap(d.seatMap)}>
+            <SeatMapEditor />
+          </EventDraftProvider>
+        </section>
+      )}
 
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel this event?">
         <p className="text-sm leading-relaxed text-muted">
