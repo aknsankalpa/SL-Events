@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, View, type ImageSourcePropType } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { CategoryId } from "@core/data";
-import { colors, coverColors } from "@/theme";
+import { coverColors } from "@/theme";
 
 const art: Record<CategoryId, ImageSourcePropType> = {
   concert: require("../../assets/categories/concert.png"),
@@ -64,7 +64,6 @@ function CategoryArt({ category, size }: { category: CategoryId; size: number })
 
   const m = motion[category];
   const inner = size * 0.72;
-  const dark = category === "community" || category === "party";
   const transform = [
     ...(m.rotate ? [{ rotate: move.interpolate({ inputRange: [0, 1], outputRange: [`${-m.rotate}deg`, `${m.rotate}deg`] }) }] : []),
     ...(m.scale ? [{ scale: move.interpolate({ inputRange: [0, 1], outputRange: [0.96, m.scale] }) }] : []),
@@ -77,10 +76,7 @@ function CategoryArt({ category, size }: { category: CategoryId; size: number })
         width: size,
         height: size,
         borderRadius: size / 2,
-        // The two pale yellow pictures need a dark disc to stand out.
-        backgroundColor: dark ? "#2a0f0a" : "#fff8ec",
-        borderWidth: dark ? 1 : 0,
-        borderColor: colors.gold + "99",
+        backgroundColor: "#fff8ec",
         alignItems: "center",
         justifyContent: "center",
         transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [size * 0.03, -size * 0.05] }) }],
