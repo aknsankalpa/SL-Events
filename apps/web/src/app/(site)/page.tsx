@@ -5,7 +5,7 @@ import { CustomerHome } from "@/components/home/CustomerHome";
 import { EventsNearYou } from "@/components/home/EventsNearYou";
 import { HomeIntro } from "@/components/home/HomeIntro";
 import { SplashGate } from "@/components/splash/SplashGate";
-import { ExploreBanner, FeaturedEvents, PopularOrganizers } from "@/components/home/HomeSections";
+import { ExploreBanner, PopularOrganizers } from "@/components/home/HomeSections";
 import { LatestEventsStack } from "@/components/home/LatestEventsStack";
 import { categories, events } from "@/lib/data";
 
@@ -27,8 +27,6 @@ export default function HomePage() {
 
       {/* Signed-in customers only: their tickets and recommendations. Renders nothing for visitors. */}
       <CustomerHome />
-
-      <LatestEventsStack events={latestEvents} />
 
       <section id="categories" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -56,7 +54,7 @@ export default function HomePage() {
         </ul>
       </section>
 
-      <FeaturedEvents />
+      <LatestEventsStack events={latestEvents} />
 
       <EventsNearYou />
 

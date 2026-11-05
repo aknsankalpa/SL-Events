@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, MapPin, Mic2, Sparkles } from "lucide-react";
-import { EventCard } from "@/components/events/EventCard";
+import { ArrowRight, MapPin, Mic2 } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
-import { featuredEvents, popularOrganizers } from "@/lib/organizers";
+import { popularOrganizers } from "@/lib/organizers";
 
 const initials = (name: string) =>
   name
@@ -11,30 +10,6 @@ const initials = (name: string) =>
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join("");
-
-/** The most in-demand events that still have tickets. */
-export function FeaturedEvents() {
-  return (
-    <section id="featured" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber">
-            <Sparkles size={13} aria-hidden /> Featured
-          </p>
-          <h2 className="font-display text-[34px] font-bold leading-tight text-text">Selling fast right now</h2>
-        </div>
-        <LinkButton href="/events" variant="outline" size="sm">
-          Explore events <ArrowRight size={14} aria-hidden />
-        </LinkButton>
-      </div>
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {featuredEvents.map((e) => (
-          <EventCard key={e.slug} event={e} />
-        ))}
-      </div>
-    </section>
-  );
-}
 
 /** Organizers ranked by tickets sold, each linking to their events. */
 export function PopularOrganizers() {

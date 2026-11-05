@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, MapPin, Pause, Play } from "lucide-react";
-import { LinkButton } from "@/components/ui/Button";
+import { ArrowRight, CalendarDays, MapPin } from "lucide-react";
 import { fromPrice, type EventItem } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { ticketsLeftTotal } from "@/lib/organizers";
@@ -23,14 +22,13 @@ function place(pos: number, count: number): React.CSSProperties {
 }
 
 /**
- * The latest events as a stack of cards. The front card can be swiped (or pushed with the arrows) away and the next one
- * rises from behind it. It moves on by itself unless the pointer is over it, focus is inside it, or it is paused, and
- * it does not move by itself for people who asked their device for less motion.
+ * The latest events as a stack of cards, and nothing else. The front card can be swiped (or dragged, or pushed with the
+ * arrow keys) away and the next one rises from behind it. It moves on by itself unless the pointer is over it or focus
+ * is inside it, and it does not move by itself for people who asked their device for less motion.
  */
 export function LatestEventsStack({ events }: { events: EventItem[] }) {
   const count = events.length;
   const [active, setActive] = useState(0);
-  const [playing, setPlaying] = useState(true);
   const [hold, setHold] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(true);
   const [dx, setDx] = useState(0);
@@ -50,11 +48,11 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
   }, []);
 
   useEffect(() => {
-    if (!playing || hold || reduceMotion || count < 2) return;
+    if (hold || reduceMotion || count < 2) return;
     const id = setTimeout(() => setActive((a) => (a + 1) % count), AUTO_MS);
     // Restarted after every change, so a manual move always gets a full pause before the next automatic one.
     return () => clearTimeout(id);
-  }, [active, playing, hold, reduceMotion, count]);
+  }, [active, hold, reduceMotion, count]);
 
   if (count === 0) return null;
   const current = events[active]!;
@@ -99,117 +97,62 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
   }
 
   return (
-    <section aria-roledescription="carousel" aria-label="Latest events" className="mx-auto max-w-site px-5 pb-6 pt-14">
-      <div className="grid items-center gap-10 lg:grid-cols-[1fr_26rem] lg:gap-16">
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-widest text-amber">Latest events</p>
-          <h2 className="font-display text-[34px] font-bold leading-tight text-text sm:text-[40px]">What&apos;s on next</h2>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-            Swipe through the newest nights from the community. Tap a card to see tickets and pick your seats.
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              aria-label="Previous event"
-              onClick={() => go(active - 1)}
-              className="flex size-11 items-center justify-center rounded-full border border-line text-text transition-colors hover:border-gold/60 hover:text-gold focus-visible:focus-ring"
-            >
-              <ChevronLeft size={18} aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label="Next event"
-              onClick={() => go(active + 1)}
-              className="flex size-11 items-center justify-center rounded-full border border-line text-text transition-colors hover:border-gold/60 hover:text-gold focus-visible:focus-ring"
-            >
-              <ChevronRight size={18} aria-hidden />
-            </button>
-            {!reduceMotion && count > 1 && (
-              <button
-                type="button"
-                aria-label={playing ? "Pause automatic changes" : "Play automatic changes"}
-                onClick={() => setPlaying((p) => !p)}
-                className="flex size-11 items-center justify-center rounded-full border border-line text-muted transition-colors hover:text-text focus-visible:focus-ring"
-              >
-                {playing ? <Pause size={15} aria-hidden /> : <Play size={15} aria-hidden />}
-              </button>
-            )}
-            <span className="ml-1 font-mono text-xs tracking-widest text-dim" aria-live="polite">
-              {String(active + 1).padStart(2, "0")} / {String(count).padStart(2, "0")}
-            </span>
-          </div>
-
-          <ul className="mt-5 flex gap-2" aria-label="Choose an event">
-            {events.map((e, i) => (
-              <li key={e.slug}>
-                <button
-                  type="button"
-                  aria-label={`Show ${e.title}`}
-                  aria-current={i === active ? "true" : undefined}
-                  onClick={() => go(i)}
-                  className={`h-1.5 rounded-full transition-all focus-visible:focus-ring ${i === active ? "w-8 bg-gold" : "w-3 bg-line hover:bg-dim"}`}
-                />
-              </li>
-            ))}
-          </ul>
-
-          <LinkButton href="/events" variant="outline" size="sm" className="mt-8">
-            Explore all events <ArrowRight size={14} aria-hidden />
-          </LinkButton>
-        </div>
-
-        {/* The stack. Only the front card can be reached with a keyboard or a screen reader. */}
-        <div
-          className="relative mx-auto h-[27rem] w-full max-w-sm select-none pt-8"
-          onMouseEnter={() => setHold(true)}
-          onMouseLeave={() => setHold(false)}
-          onFocus={() => setHold(true)}
-          onBlur={() => setHold(false)}
-          aria-live="off"
-        >
-          {events.map((event, i) => {
-            const pos = (i - active + count) % count;
-            const front = pos === 0;
-            const style = place(pos, count);
-            const dragging = front && dx !== 0;
-            return (
-              <div
-                key={event.slug}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={`${i + 1} of ${count}`}
-                aria-hidden={!front}
-                inert={!front}
-                onPointerDown={front ? onDown : undefined}
-                onPointerMove={front ? onMove : undefined}
-                onPointerUp={front ? onUp : undefined}
-                onPointerCancel={front ? onCancel : undefined}
-                onClickCapture={
-                  front
-                    ? (e) => {
-                        if (suppressClick.current) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          suppressClick.current = false;
-                        }
+    // The whole section is the stack: no heading or buttons around it. It keeps the old Featured section's anchor.
+    <section id="featured" aria-roledescription="carousel" aria-label="Latest events" className="mx-auto max-w-site scroll-mt-24 px-5 py-16">
+      {/* Only the front card can be reached with a keyboard or a screen reader. Left and right arrows change the card. */}
+      <div
+        className="relative mx-auto h-[29rem] w-full max-w-md select-none pt-8"
+        onMouseEnter={() => setHold(true)}
+        onMouseLeave={() => setHold(false)}
+        onFocus={() => setHold(true)}
+        onBlur={() => setHold(false)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight") go(active + 1);
+          else if (e.key === "ArrowLeft") go(active - 1);
+        }}
+        aria-live="off"
+      >
+        {events.map((event, i) => {
+          const pos = (i - active + count) % count;
+          const front = pos === 0;
+          const style = place(pos, count);
+          const dragging = front && dx !== 0;
+          return (
+            <div
+              key={event.slug}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${i + 1} of ${count}`}
+              aria-hidden={!front}
+              inert={!front}
+              onPointerDown={front ? onDown : undefined}
+              onPointerMove={front ? onMove : undefined}
+              onPointerUp={front ? onUp : undefined}
+              onPointerCancel={front ? onCancel : undefined}
+              onClickCapture={
+                front
+                  ? (e) => {
+                      if (suppressClick.current) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        suppressClick.current = false;
                       }
-                    : undefined
-                }
-                className={`absolute inset-x-0 bottom-0 top-8 origin-bottom ${
-                  dragging ? "" : "transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-                } ${front ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
-                style={{
-                  ...style,
-                  touchAction: "pan-y",
-                  ...(dragging ? { transform: `translate3d(${dx}px,0,0) rotate(${dx / 22}deg)`, opacity: Math.max(0.4, 1 - Math.abs(dx) / 500) } : {}),
-                }}
-              >
-                <StackCard event={event} />
-              </div>
-            );
-          })}
-        </div>
+                    }
+                  : undefined
+              }
+              className={`absolute inset-x-0 bottom-0 top-8 origin-bottom ${
+                dragging ? "" : "transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+              } ${front ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
+              style={{
+                ...style,
+                touchAction: "pan-y",
+                ...(dragging ? { transform: `translate3d(${dx}px,0,0) rotate(${dx / 22}deg)`, opacity: Math.max(0.4, 1 - Math.abs(dx) / 500) } : {}),
+              }}
+            >
+              <StackCard event={event} />
+            </div>
+          );
+        })}
       </div>
       <p className="sr-only" aria-live="polite">
         Showing {current.title}
