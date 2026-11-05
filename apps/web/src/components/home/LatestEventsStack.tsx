@@ -6,7 +6,7 @@ import { ArrowRight, CalendarDays, MapPin } from "lucide-react";
 import { fromPrice, type EventItem } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { ticketsLeftTotal } from "@/lib/organizers";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { CategoryArt, coverGradients } from "@/components/events/CategoryIcon";
 
 const AUTO_MS = 5000;
 const SWIPE_PX = 70;
@@ -178,7 +178,7 @@ function StackCard({ event }: { event: EventItem }) {
         ) : (
           (event.fewLeft || left <= 20) && <span className="absolute right-4 top-4 rounded-full bg-danger px-3 py-1 text-[10px] font-bold text-white">FEW LEFT</span>
         )}
-        <CategoryIcon id={event.category} size={72} strokeWidth={1.3} className={`${coverIconClass(event.category)} transition-transform duration-500 group-hover:scale-110`} />
+        <CategoryArt id={event.category} size={116} />
         <span className="absolute bottom-4 left-4 rounded-lg bg-black/65 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber">{event.badgeDate}</span>
       </div>
       <div className="flex flex-col gap-2 p-5">

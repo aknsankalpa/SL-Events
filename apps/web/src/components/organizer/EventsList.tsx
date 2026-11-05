@@ -82,7 +82,7 @@ export function EventsList() {
             <li key={e.id} className="min-w-0">
               <Panel className={`flex h-full flex-col p-5 ${e.status === "draft" ? "border-dashed" : ""}`}>
                 <div className="flex items-start gap-4">
-                  <EventThumb category={e.category} size={52} />
+                  <EventThumb plain category={e.category} size={52} />
                   <div className="min-w-0 flex-1 leading-tight">
                     <h2 className="truncate text-base font-bold text-text">{e.title}</h2>
                     <p className="mt-1.5 flex items-center gap-1.5 text-xs text-dim">

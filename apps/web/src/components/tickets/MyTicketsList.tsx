@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AlertCircle, Clock, Hourglass, Loader2, QrCode, Ticket, Upload } from "lucide-react";
 import { useBookings, useNow } from "@/components/booking/useBookings";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { CategoryArt, coverGradients } from "@/components/events/CategoryIcon";
 import { LinkButton } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { bookingEvent, canIssueTickets, ticketSummary, ticketsFor, type Booking } from "@/lib/bookings";
@@ -115,7 +115,7 @@ function TicketRow({ booking: b }: { booking: Booking }) {
   return (
     <article className={`flex overflow-hidden rounded-xl border bg-surface ${b.status === "proof_rejected" ? "border-danger/30" : "border-line"}`}>
       <div aria-hidden className={`hidden w-44 shrink-0 items-center justify-center bg-gradient-to-br sm:flex ${coverGradients[category]}`}>
-        <CategoryIcon id={category} size={36} strokeWidth={1.75} className={coverIconClass(category)} />
+        <CategoryArt id={category} size={56} />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 sm:p-6">

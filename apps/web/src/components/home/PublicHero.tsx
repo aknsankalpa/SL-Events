@@ -1,5 +1,6 @@
 import { ArrowRight, MapPin, Search } from "lucide-react";
 import { LatestEventsStack } from "@/components/home/LatestEventsStack";
+import { StatIcon } from "@/components/home/StatIcon";
 import { LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { citiesWithEvents, events } from "@/lib/data";
@@ -76,11 +77,12 @@ export function PublicHero() {
 
           <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4">
             {[
-              [String(events.length), "upcoming events"],
-              [String(citiesWithEvents.length), "cities"],
-              [String(organizerProfiles.length), "organizers"],
-            ].map(([value, label]) => (
-              <div key={label}>
+              [String(events.length), "upcoming events", "upcoming"],
+              [String(citiesWithEvents.length), "cities", "cities"],
+              [String(organizerProfiles.length), "organizers", "organizers"],
+            ].map(([value, label, icon]) => (
+              <div key={label} className="flex items-center gap-3">
+                <StatIcon name={icon as "upcoming" | "cities" | "organizers"} />
                 <dt className="sr-only">{label}</dt>
                 <dd className="flex items-baseline gap-2">
                   <span className="font-display text-3xl font-bold text-gold">{value}</span>

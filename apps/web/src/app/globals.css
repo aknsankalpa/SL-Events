@@ -155,6 +155,148 @@ body {
   }
 }
 
+/* Category pictures: the disc floats, and each picture has a small movement that suits it. */
+.cat-float {
+  animation: cat-float 4.2s ease-in-out infinite;
+}
+.cat-concert {
+  animation: cat-sway 2.6s ease-in-out infinite;
+  transform-origin: 50% 85%;
+}
+.cat-party {
+  animation: cat-beat 1.5s ease-in-out infinite;
+}
+.cat-cricket {
+  animation: cat-hop 2.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+.cat-culture {
+  animation: cat-sway 3.2s ease-in-out infinite;
+}
+.cat-movies {
+  animation: cat-clap 2.8s ease-in-out infinite;
+}
+.cat-food {
+  animation: cat-wiggle 3s ease-in-out infinite;
+}
+.cat-travel {
+  animation: cat-turn 5s ease-in-out infinite;
+}
+.cat-community {
+  animation: cat-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes cat-float {
+  0%,
+  100% {
+    transform: translateY(3px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes cat-sway {
+  0%,
+  100% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+}
+@keyframes cat-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.12);
+  }
+  40% {
+    transform: scale(0.98);
+  }
+  60% {
+    transform: scale(1.07);
+  }
+}
+@keyframes cat-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  25% {
+    transform: translateY(-9%) scale(0.97, 1.03);
+  }
+  45% {
+    transform: translateY(0) scale(1.05, 0.95);
+  }
+}
+@keyframes cat-clap {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  70% {
+    transform: rotate(-8deg);
+  }
+  80% {
+    transform: rotate(4deg);
+  }
+  90% {
+    transform: rotate(-3deg);
+  }
+}
+@keyframes cat-wiggle {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0deg);
+  }
+  78% {
+    transform: rotate(10deg);
+  }
+  86% {
+    transform: rotate(-9deg);
+  }
+  94% {
+    transform: rotate(5deg);
+  }
+}
+@keyframes cat-turn {
+  0%,
+  100% {
+    transform: rotate(-12deg) scale(0.97);
+  }
+  50% {
+    transform: rotate(12deg) scale(1.03);
+  }
+}
+@keyframes cat-breathe {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cat-float,
+  .cat-concert,
+  .cat-party,
+  .cat-cricket,
+  .cat-culture,
+  .cat-movies,
+  .cat-food,
+  .cat-travel,
+  .cat-community {
+    animation: none;
+  }
+}
+
 @utility focus-ring {
   outline: 2px solid var(--color-gold);
   outline-offset: 2px;

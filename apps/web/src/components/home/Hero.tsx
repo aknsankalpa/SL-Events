@@ -1,5 +1,6 @@
 import { AlertTriangle, CalendarDays, MapPin, QrCode, Search, Ticket } from "lucide-react";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { CategoryArt, coverGradients } from "@/components/events/CategoryIcon";
+import { StatIcon } from "@/components/home/StatIcon";
 import { useBookings, useNow } from "@/components/booking/useBookings";
 import { LinkButton } from "@/components/ui/Button";
 import { bookingEvent, canIssueTickets, ticketCount, ticketSummary } from "@/lib/bookings";
@@ -93,11 +94,12 @@ export function Hero({ firstName }: { firstName: string }) {
 
           <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4">
             {[
-              [String(events.length), "upcoming events"],
-              [String(events.filter((e) => e.city === "Seoul").length), "events in Seoul"],
-              [String(wallet), wallet === 1 ? "ticket in your wallet" : "tickets in your wallet"],
-            ].map(([value, label]) => (
-              <div key={label}>
+              [String(events.length), "upcoming events", "upcoming"],
+              [String(events.filter((e) => e.city === "Seoul").length), "events in Seoul", "cities"],
+              [String(wallet), wallet === 1 ? "ticket in your wallet" : "tickets in your wallet", "organizers"],
+            ].map(([value, label, icon]) => (
+              <div key={label} className="flex items-center gap-3">
+                <StatIcon name={icon as "upcoming" | "cities" | "organizers"} />
                 <dt className="sr-only">{label}</dt>
                 <dd className="flex items-baseline gap-2">
                   <span className="font-display text-3xl font-bold text-gold">{value}</span>
@@ -149,7 +151,7 @@ function NextEventCard() {
         <span className="absolute left-4 top-4 rounded-full border border-gold/40 bg-black/60 px-2.5 py-1 text-[10px] font-bold uppercase text-gold">
           {e!.category}
         </span>
-        <CategoryIcon id={e!.category} size={56} strokeWidth={1.5} className={coverIconClass(e!.category)} />
+        <CategoryArt id={e!.category} size={88} />
       </div>
       <div className="space-y-3 p-6">
         <div className="flex items-center justify-between">

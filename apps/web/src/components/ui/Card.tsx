@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { CategoryArt, CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
 import type { CategoryId } from "@/lib/data";
 
 export function Card({ className = "", ...props }: ComponentProps<"div">) {
@@ -16,13 +16,17 @@ export function CardTitle({ children, action }: { children: ReactNode; action?: 
 }
 
 /** Small square cover used in order summaries. */
-export function EventThumb({ category, size = 56 }: { category: CategoryId; size?: number }) {
+export function EventThumb({ category, size = 56, plain = false }: { category: CategoryId; size?: number; plain?: boolean }) {
   return (
     <span
       style={{ width: size, height: size }}
       className={`flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${coverGradients[category]}`}
     >
-      <CategoryIcon id={category} size={size * 0.42} strokeWidth={1.75} className={coverIconClass(category)} />
+      {plain ? (
+        <CategoryIcon id={category} size={size * 0.42} strokeWidth={1.75} className={coverIconClass(category)} />
+      ) : (
+        <CategoryArt id={category} size={size * 0.74} />
+      )}
     </span>
   );
 }

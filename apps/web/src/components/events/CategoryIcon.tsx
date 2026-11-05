@@ -1,3 +1,4 @@
+import Image from "next/image";
 import {
   Clapperboard,
   Drama,
@@ -25,6 +26,26 @@ const icons = {
 export function CategoryIcon({ id, ...props }: { id: CategoryId } & LucideProps) {
   const Icon = icons[id];
   return <Icon aria-hidden {...props} />;
+}
+
+const artOrder: CategoryId[] = ["concert", "party", "cricket", "culture", "movies", "food", "travel", "community"];
+
+/**
+ * The colourful category picture for customer screens: it sits on a disc so it stays clear on any cover (dark for the two pale yellow pictures, light for the rest), the disc
+ * floats gently and the picture has its own small movement (see .cat-* in globals.css). The plain CategoryIcon above
+ * stays for the organizer and admin portals. `size` is the disc's width.
+ */
+export function CategoryArt({ id, size, className = "" }: { id: CategoryId; size: number; className?: string }) {
+  const inner = Math.round(size * 0.72);
+  return (
+    <span
+      aria-hidden
+      style={{ width: size, height: size, animationDelay: `${artOrder.indexOf(id) * -0.45}s` }}
+      className={`cat-float inline-flex shrink-0 items-center justify-center rounded-full shadow-lg shadow-black/35 ${id === "community" || id === "party" ? "bg-[#2a0f0a] ring-1 ring-gold/60" : "bg-[#fff8ec]"} ${className}`}
+    >
+      <Image src={`/icons/category/${id}.png`} alt="" width={inner} height={inner} className={`cat-${id}`} draggable={false} />
+    </span>
+  );
 }
 
 /** Cover gradients per category until real event photos are uploaded. */

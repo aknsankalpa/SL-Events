@@ -3,7 +3,7 @@ import { ArrowRight, CalendarDays, MapPin } from "lucide-react";
 import { fromPrice, type EventItem } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { ticketsLeftTotal } from "@/lib/organizers";
-import { CategoryIcon, coverGradients, coverIconClass } from "./CategoryIcon";
+import { CategoryArt, coverGradients } from "./CategoryIcon";
 
 export function EventCard({ event }: { event: EventItem }) {
   const left = ticketsLeftTotal(event);
@@ -23,7 +23,7 @@ export function EventCard({ event }: { event: EventItem }) {
             <span className="absolute right-3 top-3 rounded-full bg-danger px-2.5 py-1 text-[10px] font-bold text-white">FEW LEFT</span>
           )
         )}
-        <CategoryIcon id={event.category} size={52} strokeWidth={1.5} className={`${coverIconClass(event.category)} transition-transform group-hover:scale-110`} />
+        <CategoryArt id={event.category} size={84} />
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-5">

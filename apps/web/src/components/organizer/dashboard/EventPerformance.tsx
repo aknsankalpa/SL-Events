@@ -27,7 +27,7 @@ export function EventPerformance({ events }: { events: OrganizerEvent[] }) {
           <tr key={e.id} className="border-t border-line">
             <td className="px-5 py-3">
               <span className="flex items-center gap-3 font-bold text-text">
-                <EventThumb category={e.category} size={30} />
+                <EventThumb plain category={e.category} size={30} />
                 <span className="whitespace-nowrap">{e.title}</span>
               </span>
             </td>

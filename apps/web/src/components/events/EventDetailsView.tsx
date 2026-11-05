@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2, CalendarDays, ChevronRight, Globe, Landmark, Mail, MapPin, Phone, Ticket, Upload, User } from "lucide-react";
-import { CategoryIcon, coverGradients, coverIconClass } from "@/components/events/CategoryIcon";
+import { CategoryArt, coverGradients } from "@/components/events/CategoryIcon";
 import { EventTicketsCard } from "@/components/events/EventTicketsCard";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { SeatChartSection } from "@/components/seats/SeatChartSection";
@@ -52,7 +52,7 @@ export function EventDetailsView({ event, preview = false, coverUrl }: Props) {
         <span className="absolute left-4 top-4 rounded-full border border-gold/40 bg-black/60 px-2.5 py-1 text-[10px] font-bold uppercase text-gold">
           {event.category}
         </span>
-        {!coverUrl && <CategoryIcon id={event.category} size={96} strokeWidth={1.5} className={coverIconClass(event.category)} />}
+        {!coverUrl && <CategoryArt id={event.category} size={132} />}
       </div>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_21rem]">

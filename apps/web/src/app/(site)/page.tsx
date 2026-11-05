@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Landmark, QrCode, Ticket, Upload } from "lucide-react";
-import { CategoryIcon } from "@/components/events/CategoryIcon";
+import { CategoryArt } from "@/components/events/CategoryIcon";
 import { CustomerHome } from "@/components/home/CustomerHome";
 import { EventsNearYou } from "@/components/home/EventsNearYou";
 import { HomeIntro } from "@/components/home/HomeIntro";
@@ -40,9 +40,9 @@ export default function HomePage() {
             <li key={c.id}>
               <Link
                 href={`/events?category=${c.id}`}
-                className="flex h-24 flex-col items-center justify-center gap-3 rounded-xl border border-line bg-surface text-text transition-colors hover:border-gold/60 hover:text-gold focus-visible:focus-ring"
+                className="flex h-28 flex-col items-center justify-center gap-2.5 rounded-xl border border-line bg-surface text-text transition-colors hover:border-gold/60 hover:text-gold focus-visible:focus-ring"
               >
-                <CategoryIcon id={c.id} size={24} className="text-gold" />
+                <CategoryArt id={c.id} size={44} />
                 <span className="text-[13px] font-bold">{c.label}</span>
               </Link>
             </li>

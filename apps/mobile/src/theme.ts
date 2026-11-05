@@ -39,9 +39,6 @@ export const coverColors: Record<CategoryId, [string, string, string]> = {
   community: ["#2a0808", "#6a1212", "#4a2410"],
 };
 
-/** Icon colour that stays readable on each cover (the gold covers need a dark icon). */
-export const coverIconColor = (id: CategoryId) => (id === "cricket" || id === "food" ? "rgba(0,0,0,0.75)" : "#ffffff");
-
 export const toneColor = {
   success: colors.success,
   warning: colors.warning,

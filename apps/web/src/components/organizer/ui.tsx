@@ -46,7 +46,7 @@ export function EventPicker({ className = "" }: { className?: string }) {
         className="min-w-[15rem] w-full rounded-xl border border-line bg-surface px-3 py-2 focus:border-gold focus:outline-none"
         triggerContent={
           <span className="flex items-center gap-3">
-            <EventThumb category={event.category} size={32} />
+            <EventThumb plain category={event.category} size={32} />
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate text-[13px] font-bold text-text">{event.title}</span>
               <span className="mt-0.5 block text-[11px] font-normal text-dim">{event.dateLabel}</span>
