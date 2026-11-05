@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Accessibility,
   AlignVerticalSpaceAround,
@@ -61,6 +61,7 @@ import {
 } from "@/lib/seatLayout";
 import { defaultStage, generateRows, gridToLayout, ROW_DEFAULTS, rowIndex, rowLabel, type NumberingOrder } from "@/lib/seating";
 import { strayReasonLabel, type StrayReason } from "@/lib/strayDots";
+import { useChartGestures } from "@/components/seats/useChartGestures";
 import { Dialog, Panel } from "../ui";
 import { useEventDraft } from "./EventDraft";
 import { Select } from "@/components/ui/Select";
@@ -273,13 +274,12 @@ export function ImageSeatMapBuilder() {
   // The drag lives in a ref (not state) so a fast press-move-release is handled even before React re-renders.
   const drag = useRef<{ x: number; y: number; ex: number; ey: number; mode: SelMode } | null>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
-  // Touch: every finger on the canvas, the two-finger pinch in progress, a one-finger pan, and a seat/stage drag.
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ dist: number; zoom: number; cx: number; cy: number; padX: number; padY: number } | null>(null);
-  const panDrag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const moveDrag = useRef<{ kind: "seats" | "stage"; x: number; y: number; ids: Set<string>; moved: boolean; collapseTo: string | null } | null>(null);
-  // After a pinch changes the zoom, keep the spot between the fingers under the fingers.
-  const anchor = useRef<{ cx: number; cy: number; padX: number; padY: number; mx: number; my: number } | null>(null);
+  // A press on a seat or the stage that may turn into a drag. Kept in a ref so a quick press-move-release is not lost
+  // between renders. Nothing is selected or moved until the finger has really moved, so a pinch that starts on a seat
+  // changes nothing.
+  const moveDrag = useRef<{ kind: "seats" | "stage"; x: number; y: number; uid: string; mode: SelMode; shift: boolean; moved: boolean; ids: Set<string> } | null>(null);
+  // A row letter pressed by a finger that might still become a pan or a pinch; it is only chosen if the finger lifts as a tap.
+  const tapRow = useRef<string | null>(null);
 
   const clampZoom = (z: number) => Math.min(4, Math.max(0.2, +z.toFixed(2)));
 
@@ -338,15 +338,6 @@ export function ImageSeatMapBuilder() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
-
-  useLayoutEffect(() => {
-    const a = anchor.current;
-    const el = canvasBox.current;
-    if (!a || !el) return;
-    anchor.current = null;
-    el.scrollLeft = a.cx * zoom + a.padX - a.mx;
-    el.scrollTop = a.cy * zoom + a.padY - a.my;
-  }, [zoom]);
 
   // Look for dots that don't look like the rest (letters, markers, extra marks) whenever the seats change.
   // A chart built without a picture has nothing to compare against.
@@ -445,152 +436,115 @@ export function ImageSeatMapBuilder() {
     return best;
   }
 
-  /** Runs first for every finger, so a second finger turns whatever was happening into a pinch. */
-  function onCanvasDownCapture(e: React.PointerEvent<SVGSVGElement>) {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const box = canvasBox.current;
-    const svg = svgRef.current;
-    if (pointers.current.size !== 2 || !box || !svg) return;
-    const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
-    drag.current = null;
+  /** How far a finger may wobble, on screen, before a press counts as a drag. */
+  const slop = (e: { pointerType: string }) => (e.pointerType === "mouse" ? 4 : 9);
+
+  /** Puts a new seat where the chart was tapped; next to a row it joins that row. */
+  function placeSeat(p: { x: number; y: number }) {
+    const seat: LayoutSeat = {
+      uid: newSeatUid(),
+      x: snap ? snapTo(p.x, GRID) : p.x,
+      y: snap ? snapTo(p.y, GRID) : p.y,
+      r: medianR,
+      section: layout.seats.reduce<{ d: number; section: string | null }>(
+        (best, s) => {
+          const d = (s.x - p.x) ** 2 + (s.y - p.y) ** 2;
+          return d < best.d ? { d, section: s.section } : best;
+        },
+        { d: Infinity, section: sections[0]?.id ?? null },
+      ).section,
+      row: "",
+      num: 0,
+    };
+    setSeats(addSeatNearRow(layout.seats, seat));
+    // The new dot joins the current selection, so a group can be completed and then named in one go.
+    setSelected((cur) => new Set([...cur, seat.uid]));
+  }
+
+  /** A press and release on a seat, without dragging: choose it the way the selection mode says. */
+  function tapSeat(uid: string, mode: SelMode, shift: boolean) {
+    if (mode === "replace") setSelected(new Set([uid]));
+    // Shift-click keeps working as a toggle, as before.
+    else if (mode === "add" && shift && selected.has(uid)) applySelection([uid], "remove");
+    else applySelection([uid], mode);
+  }
+
+  function dropGestures() {
     moveDrag.current = null;
-    panDrag.current = null;
+    drag.current = null;
+    tapRow.current = null;
     setRect(null);
     setMoving(null);
-    const midX = (a.x + b.x) / 2;
-    const midY = (a.y + b.y) / 2;
-    const at = svg.getBoundingClientRect();
-    const frame = box.getBoundingClientRect();
-    pinch.current = {
-      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-      zoom,
-      // The chart point between the fingers, and where the chart starts inside the scrolling frame.
-      cx: (midX - at.left) / zoom,
-      cy: (midY - at.top) / zoom,
-      padX: at.left - frame.left + box.scrollLeft,
-      padY: at.top - frame.top + box.scrollTop,
-    };
   }
 
-  function onCanvasDown(e: React.PointerEvent<SVGSVGElement>) {
-    if (pinch.current) return;
+  /**
+   * One finger (or the mouse) went down. The tool decides what it will do, and the gesture engine keeps it apart from
+   * pinching: see useChartGestures.
+   */
+  function onSingleDown(e: React.PointerEvent): "tool" | "pan" {
+    dropGestures();
     const p = toImage(e);
-    if (tool === "pan") {
-      const box = canvasBox.current!;
-      svgRef.current!.setPointerCapture(e.pointerId);
-      panDrag.current = { x: e.clientX, y: e.clientY, left: box.scrollLeft, top: box.scrollTop };
-      return;
-    }
-    if (tool === "add") {
-      const seat: LayoutSeat = {
-        uid: newSeatUid(),
-        x: snap ? snapTo(p.x, GRID) : p.x,
-        y: snap ? snapTo(p.y, GRID) : p.y,
-        r: medianR,
-        section: layout.seats.reduce<{ d: number; section: string | null }>(
-          (best, s) => {
-            const d = (s.x - p.x) ** 2 + (s.y - p.y) ** 2;
-            return d < best.d ? { d, section: s.section } : best;
-          },
-          { d: Infinity, section: sections[0]?.id ?? null },
-        ).section,
-        row: "",
-        num: 0,
-      };
-      setSeats(addSeatNearRow(layout.seats, seat));
-      // The new dot joins the current selection, so a group can be completed and then named in one go.
-      setSelected((cur) => new Set([...cur, seat.uid]));
-      return;
-    }
+    if (tool === "pan" || tool === "add") return "pan"; // a tap on Add places a seat; dragging just looks around
     if (tool === "area") {
-      svgRef.current!.setPointerCapture(e.pointerId);
       drag.current = { x: p.x, y: p.y, ex: p.x, ey: p.y, mode: modeFor(e) };
       setRect({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
-      return;
+      return "tool";
     }
-    // select tool on empty space clears the selection (unless the click is meant to add or remove)
-    if (modeFor(e) === "replace") setSelected(new Set());
+
+    // Select tool: a seat or the stage can be dragged; anything else pans the chart (a tap there clears the selection).
+    const row = (e.target as Element | null)?.closest?.("[data-row]")?.getAttribute("data-row");
+    if (row) {
+      tapRow.current = row;
+      return "pan";
+    }
+    const hit = seatAt(p);
+    if (hit) {
+      moveDrag.current = { kind: "seats", x: p.x, y: p.y, uid: hit.uid, mode: modeFor(e), shift: e.shiftKey || e.metaKey || e.ctrlKey, moved: false, ids: new Set() };
+      return "tool";
+    }
+    const st = layout.stage;
+    const m = 8 / zoom;
+    if (st && p.x >= st.x - m && p.x <= st.x + st.w + m && p.y >= st.y - m && p.y <= st.y + st.h + m) {
+      moveDrag.current = { kind: "stage", x: p.x, y: p.y, uid: "", mode: "replace", shift: false, moved: false, ids: new Set() };
+      return "tool";
+    }
+    return "pan";
   }
 
-  function onCanvasMove(e: React.PointerEvent<SVGSVGElement>) {
-    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const box = canvasBox.current;
-
-    // Two fingers: zoom by how far apart they are, and follow them so the chart moves with the hands.
-    if (pinch.current && box) {
-      if (pointers.current.size < 2) return;
-      const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
-      const pc = pinch.current;
-      const next = clampZoom((pc.zoom * (Math.hypot(a.x - b.x, a.y - b.y) || 1)) / pc.dist);
-      const frame = box.getBoundingClientRect();
-      const mx = (a.x + b.x) / 2 - frame.left;
-      const my = (a.y + b.y) / 2 - frame.top;
-      if (next === zoom) {
-        box.scrollLeft = pc.cx * zoom + pc.padX - mx;
-        box.scrollTop = pc.cy * zoom + pc.padY - my;
-      } else {
-        anchor.current = { cx: pc.cx, cy: pc.cy, padX: pc.padX, padY: pc.padY, mx, my };
-        setZoom(next);
-      }
-      return;
-    }
-
-    const pan = panDrag.current;
-    if (pan && box) {
-      box.scrollLeft = pan.left - (e.clientX - pan.x);
-      box.scrollTop = pan.top - (e.clientY - pan.y);
-      return;
-    }
-
+  function onSingleMove(e: React.PointerEvent) {
+    const p = toImage(e);
     const md = moveDrag.current;
     if (md) {
-      const p = toImage(e);
       const dx = p.x - md.x;
       const dy = p.y - md.y;
-      // A press that barely moves is a click, not a drag.
-      if (!md.moved && Math.hypot(dx, dy) * zoom < 4) return;
-      md.moved = true;
+      // A press that barely moves is a tap, not a drag. Taking seats out of the selection is never a drag.
+      if (md.mode === "remove" || (!md.moved && Math.hypot(dx, dy) * zoom < slop(e))) return;
+      if (!md.moved) {
+        md.moved = true;
+        if (md.kind === "seats") {
+          // Dragging a seat that is not chosen yet chooses it (alone, unless the mode adds), then moves the whole selection.
+          const ids = selected.has(md.uid) ? new Set(selected) : md.mode === "add" ? new Set([...selected, md.uid]) : new Set([md.uid]);
+          md.ids = ids;
+          if (!selected.has(md.uid)) setSelected(ids);
+        }
+      }
       setMoving({ kind: md.kind, dx, dy });
       return;
     }
-
     const d = drag.current;
     if (!d) return;
-    const p = toImage(e);
     d.ex = p.x;
     d.ey = p.y;
     setRect({ x1: d.x, y1: d.y, x2: p.x, y2: p.y });
   }
 
-  function onCanvasCancel(e: React.PointerEvent<SVGSVGElement>) {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinch.current = null;
-    panDrag.current = null;
-    moveDrag.current = null;
-    drag.current = null;
-    setRect(null);
-    setMoving(null);
-  }
-
-  function onCanvasUp(e: React.PointerEvent<SVGSVGElement>) {
-    pointers.current.delete(e.pointerId);
-    if (pinch.current) {
-      // Lifting one finger ends the pinch; the finger left behind does nothing until it is lifted too.
-      if (pointers.current.size < 2) pinch.current = null;
-      return;
-    }
-    if (panDrag.current) {
-      panDrag.current = null;
-      return;
-    }
-
+  function onSingleUp(e: React.PointerEvent) {
     const md = moveDrag.current;
     if (md) {
       moveDrag.current = null;
       setMoving(null);
       if (!md.moved) {
-        // Pressing a seat inside a group only drags the group; a plain click narrows the selection to that seat.
-        if (md.collapseTo) setSelected(new Set([md.collapseTo]));
+        if (md.kind === "seats") tapSeat(md.uid, md.mode, md.shift);
         return;
       }
       const end = toImage(e);
@@ -612,7 +566,7 @@ export function ImageSeatMapBuilder() {
     const end = toImage(e);
 
     // A press and release without moving is a click: toggle the dot under the pointer.
-    if (Math.hypot(end.x - d.x, end.y - d.y) * zoom < 4) {
+    if (Math.hypot(end.x - d.x, end.y - d.y) * zoom < slop(e)) {
       const hit = seatAt(end);
       if (hit) applySelection([hit.uid], d.mode === "replace" ? (selected.has(hit.uid) ? "remove" : "add") : d.mode);
       else if (d.mode === "replace") setSelected(new Set());
@@ -625,42 +579,25 @@ export function ImageSeatMapBuilder() {
     applySelection(hit, d.mode);
   }
 
-  /** Pressing a seat selects it, and dragging from it moves it (and the rest of the selection). */
-  function onSeatDown(e: React.PointerEvent, uid: string) {
-    if (tool !== "select" || pinch.current || pointers.current.size > 1) return;
-    e.stopPropagation();
-    const mode = modeFor(e);
-    let ids: Set<string>;
-    let collapseTo: string | null = null;
-    if (mode === "replace") {
-      if (selected.has(uid) && selected.size > 1) {
-        ids = new Set(selected);
-        collapseTo = uid;
-      } else {
-        ids = new Set([uid]);
-        setSelected(ids);
-      }
-    } else if (mode === "add" && selected.has(uid) && (e.shiftKey || e.metaKey || e.ctrlKey)) {
-      // Shift-click keeps working as a toggle, as before.
-      applySelection([uid], "remove");
-      return;
-    } else {
-      applySelection([uid], mode);
-      ids = mode === "remove" ? new Set() : new Set([...selected, uid]);
-    }
-    if (ids.size === 0) return;
-    const p = toImage(e);
-    svgRef.current!.setPointerCapture(e.pointerId);
-    moveDrag.current = { kind: "seats", x: p.x, y: p.y, ids, moved: false, collapseTo };
+  /** A finger that was panning lifted without moving: that is a tap. */
+  function onTap(e: React.PointerEvent) {
+    const row = tapRow.current;
+    tapRow.current = null;
+    if (tool === "add") placeSeat(toImage(e));
+    else if (row) selectRow(row);
+    else if (tool === "select" && modeFor(e) === "replace") setSelected(new Set());
   }
 
-  function onStageDown(e: React.PointerEvent) {
-    if (tool !== "select" || pinch.current || pointers.current.size > 1) return;
-    e.stopPropagation();
-    const p = toImage(e);
-    svgRef.current!.setPointerCapture(e.pointerId);
-    moveDrag.current = { kind: "stage", x: p.x, y: p.y, ids: new Set(), moved: false, collapseTo: null };
-  }
+  const gestures = useChartGestures({
+    boxRef: canvasBox,
+    zoom,
+    setZoom,
+    onSingleDown,
+    onSingleMove,
+    onSingleUp,
+    onTap,
+    onAbort: dropGestures,
+  });
 
   function selectRow(row: string) {
     setSelected(new Set(layout.seats.filter((s) => s.row === row).map((s) => s.uid)));
@@ -1004,19 +941,22 @@ export function ImageSeatMapBuilder() {
             )}
           </div>
 
-          <div ref={canvasBox} className="max-h-[70vh] overflow-auto bg-black/40 p-3 sm:p-4" tabIndex={0} aria-label="Seating plan canvas">
+          <div
+            ref={canvasBox}
+            {...gestures.bind}
+            onContextMenu={(e) => e.preventDefault()}
+            style={gestures.frameStyle}
+            className="max-h-[70vh] overflow-auto overscroll-contain bg-black/40 p-3 sm:p-4"
+            tabIndex={0}
+            aria-label="Seating plan canvas"
+          >
             <svg
               ref={svgRef}
               viewBox={`0 0 ${layout.width} ${layout.height}`}
               style={{ width: layout.width * zoom, maxWidth: "none" }}
-              className={`block select-none touch-none ${
+              className={`block select-none ${
                 tool === "pan" ? "cursor-grab" : tool === "select" ? "cursor-default" : "cursor-crosshair"
               }`}
-              onPointerDownCapture={onCanvasDownCapture}
-              onPointerDown={onCanvasDown}
-              onPointerMove={onCanvasMove}
-              onPointerUp={onCanvasUp}
-              onPointerCancel={onCanvasCancel}
               role="application"
               aria-label="Seat chart. Use the tools above to select and edit seats."
             >
@@ -1024,7 +964,6 @@ export function ImageSeatMapBuilder() {
               {layout.stage && (
                 <g
                   transform={moving?.kind === "stage" ? `translate(${moving.dx} ${moving.dy})` : undefined}
-                  onPointerDown={onStageDown}
                   className={tool === "select" ? "cursor-move" : undefined}
                 >
                   <rect
@@ -1071,7 +1010,6 @@ export function ImageSeatMapBuilder() {
                   <g
                     key={s.uid}
                     transform={moving?.kind === "seats" && isSel ? `translate(${moving.dx} ${moving.dy})` : undefined}
-                    onPointerDown={(e) => onSeatDown(e, s.uid)}
                     className={tool === "select" ? "cursor-pointer" : undefined}
                   >
                     <title>{`${s.row}${s.num}${sec ? ` · ${sec.name}` : " · not assigned"}${s.blocked ? " · blocked" : ""}${s.accessible ? " · accessible" : ""}${strays.has(s.uid) ? ` · may not be a seat: ${strayReasonLabel[strays.get(s.uid)!]}` : ""}`}</title>
@@ -1124,10 +1062,7 @@ export function ImageSeatMapBuilder() {
                       fontWeight={700}
                       textAnchor="middle"
                       className="cursor-pointer"
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        selectRow(row);
-                      }}
+                      data-row={row}
                     >
                       {row}
                     </text>

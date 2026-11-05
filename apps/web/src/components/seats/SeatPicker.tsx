@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Maximize, Minus, Plus, Sparkles } from "lucide-react";
 import { formatKrw } from "@/lib/format";
 import { findSeatsTogether, sectionFree, type ChartSeat, type SeatChart } from "@/lib/seating";
+import { useChartGestures } from "./useChartGestures";
 
 type Props = {
   chart: SeatChart;
@@ -56,9 +57,6 @@ export function SeatPicker({ chart, taken, selected, onToggle, onSelectMany, max
   const [focus, setFocus] = useState<string | null>(null);
   const [group, setGroup] = useState(2);
   const [note, setNote] = useState<string>();
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ dist: number; zoom: number; cx: number; cy: number; padX: number; padY: number } | null>(null);
-  const anchor = useRef<{ cx: number; cy: number; padX: number; padY: number; mx: number; my: number } | null>(null);
 
   const fit = () => {
     const el = box.current;
@@ -85,54 +83,40 @@ export function SeatPicker({ chart, taken, selected, onToggle, onSelectMany, max
     [view.w, medianR],
   );
 
-  useLayoutEffect(() => {
-    const a = anchor.current;
-    const el = box.current;
-    if (!a || !el) return;
-    anchor.current = null;
-    el.scrollLeft = a.cx * zoom + a.padX - a.mx;
-    el.scrollTop = a.cy * zoom + a.padY - a.my;
-  }, [zoom]);
-
-  function onDown(e: React.PointerEvent) {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const el = box.current;
-    const svg = el?.querySelector("svg");
-    if (pointers.current.size !== 2 || !el || !svg) return;
-    const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
-    const at = svg.getBoundingClientRect();
-    const frame = el.getBoundingClientRect();
-    pinch.current = {
-      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-      zoom,
-      cx: ((a.x + b.x) / 2 - at.left) / zoom,
-      cy: ((a.y + b.y) / 2 - at.top) / zoom,
-      padX: at.left - frame.left + el.scrollLeft,
-      padY: at.top - frame.top + el.scrollTop,
-    };
-  }
-  function onMove(e: React.PointerEvent) {
-    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const el = box.current;
-    const pc = pinch.current;
-    if (!pc || !el || pointers.current.size < 2) return;
-    const [a, b] = [...pointers.current.values()] as [{ x: number; y: number }, { x: number; y: number }];
-    const next = clampZoom((pc.zoom * (Math.hypot(a.x - b.x, a.y - b.y) || 1)) / pc.dist);
-    const frame = el.getBoundingClientRect();
-    const mx = (a.x + b.x) / 2 - frame.left;
-    const my = (a.y + b.y) / 2 - frame.top;
-    if (next === zoom) {
-      el.scrollLeft = pc.cx * zoom + pc.padX - mx;
-      el.scrollTop = pc.cy * zoom + pc.padY - my;
-    } else {
-      anchor.current = { cx: pc.cx, cy: pc.cy, padX: pc.padX, padY: pc.padY, mx, my };
-      setZoom(next);
+  /** The free or chosen seat nearest to a touch, if one is close enough. Fingers are bigger than seats, so the reach is generous. */
+  function seatNear(clientX: number, clientY: number): ChartSeat | null {
+    const svg = box.current?.querySelector("svg");
+    if (!svg || zoom <= 0) return null;
+    const r = svg.getBoundingClientRect();
+    const x = view.x + (clientX - r.left) / zoom;
+    const y = view.y + (clientY - r.top) / zoom;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const reach = (coarse ? 22 : 10) / zoom;
+    let best: ChartSeat | null = null;
+    let bestD = Infinity;
+    for (const seat of chart.seats) {
+      const d = Math.hypot(seat.x - x, seat.y - y);
+      if (d < bestD && d <= Math.max(seat.r * 1.3, reach)) {
+        best = seat;
+        bestD = d;
+      }
     }
+    return best;
   }
-  function onUp(e: React.PointerEvent) {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinch.current = null;
-  }
+
+  // One finger pans the chart and a tap chooses the seat under it; two fingers zoom. See useChartGestures.
+  const gestures = useChartGestures({
+    boxRef: box,
+    zoom,
+    setZoom,
+    onSingleDown: () => "pan",
+    onTap: (e) => {
+      if (!onToggle) return;
+      const seat = seatNear(e.clientX, e.clientY);
+      if (!seat || seat.blocked || !seat.sectionId || taken.has(seat.id)) return;
+      onToggle(seat.id);
+    },
+  });
 
   // Ctrl or Cmd with the wheel zooms the chart instead of the page.
   useEffect(() => {
@@ -207,15 +191,12 @@ export function SeatPicker({ chart, taken, selected, onToggle, onSelectMany, max
 
       <div
         ref={attach}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        // One finger scrolls the chart natively; two fingers are handled above as a pinch.
-        style={{ touchAction: "pan-x pan-y" }}
-        className="max-h-[70vh] overflow-auto bg-black/40 p-2"
+        {...gestures.bind}
+        onContextMenu={(e) => e.preventDefault()}
+        style={gestures.frameStyle}
+        className="max-h-[70vh] cursor-grab overflow-auto overscroll-contain bg-black/40 p-2 active:cursor-grabbing"
         tabIndex={0}
-        aria-label="Seat chart. Scroll to look around."
+        aria-label="Seat chart. Drag to look around, pinch to zoom, tap a seat to choose it."
       >
         {zoom > 0 && (
           <svg
@@ -256,8 +237,8 @@ export function SeatPicker({ chart, taken, selected, onToggle, onSelectMany, max
                   aria-label={label(s, status)}
                   aria-pressed={clickable ? status === "selected" : undefined}
                   tabIndex={clickable ? 0 : undefined}
-                  className={clickable ? "cursor-pointer focus:outline-none" : undefined}
-                  onClick={clickable ? () => onToggle?.(s.id) : undefined}
+                  className={clickable ? "focus:outline-none" : undefined}
+                  onClick={clickable ? (e) => e.detail === 0 && onToggle?.(s.id) : undefined}
                   onKeyDown={
                     clickable
                       ? (e) => {
