@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -39,6 +39,16 @@ export function PortalScreen({ section }: { section: Section }) {
   const roles = rolesFor(user?.email);
   const portal = portalFor(user?.email);
   const url = `${base}${meta[section].path}`;
+
+  // Never spin forever: if the website hasn't finished loading after a while, show the "can't reach it" screen.
+  useEffect(() => {
+    if (state !== "loading") return;
+    const id = setTimeout(() => {
+      setProblem("The website didn't answer within 45 seconds.");
+      setState("error");
+    }, 45_000);
+    return () => clearTimeout(id);
+  }, [state, reloadKey, url]);
 
   const reload = () => {
     setState("loading");

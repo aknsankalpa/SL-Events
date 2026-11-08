@@ -8,8 +8,20 @@ import { createPersistedStore } from "@core/persistedStore";
  * on the same Wi-Fi); after launch it is the real domain. A person can also change it on the "can't reach the
  * website" screen, which is saved on the phone.
  */
-export const defaultSiteUrl = (): string =>
-  (process.env.EXPO_PUBLIC_WEB_URL ?? (Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000")).replace(/\/+$/, "");
+export const defaultSiteUrl = (): string => (process.env.EXPO_PUBLIC_WEB_URL ?? guessSiteUrl()).replace(/\/+$/, "");
+
+/**
+ * Without a configured address: the Android emulator reaches the computer at 10.0.2.2, and the browser preview assumes
+ * the website runs on the same computer that served the preview (so a phone that opened http://192.168.0.10:8081
+ * looks for the website at http://192.168.0.10:3000, not at its own "localhost").
+ */
+function guessSiteUrl(): string {
+  if (Platform.OS === "android") return "http://10.0.2.2:3000";
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:3000`;
+  }
+  return "http://localhost:3000";
+}
 
 const siteStore = createPersistedStore<{ url: string }>("sl-events:site-url:v1", { url: "" }, (stored) => {
   const url = stored && typeof stored === "object" && "url" in stored && typeof (stored as { url: unknown }).url === "string" ? (stored as { url: string }).url : "";
