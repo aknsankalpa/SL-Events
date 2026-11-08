@@ -360,6 +360,8 @@ export function getEvent(slug: string) {
 }
 
 export const homeEvents = events.filter((e) => e.featured);
+/** The next six events by date: the stacked cards on the website's and the app's home screens. */
+export const latestEvents = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, 6);
 export const totalUpcomingEvents = events.length;
 export const citiesWithEvents = [...new Set(events.map((e) => e.city))];
 

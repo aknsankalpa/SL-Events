@@ -3,11 +3,8 @@ import { LatestEventsStack } from "@/components/home/LatestEventsStack";
 import { StatIcon } from "@/components/home/StatIcon";
 import { LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { citiesWithEvents, events } from "@/lib/data";
+import { citiesWithEvents, events, latestEvents } from "@/lib/data";
 import { organizerProfiles } from "@/lib/organizers";
-
-/** The next events by date, shown as the stack of cards beside the welcome text. */
-const latestEvents = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)).slice(0, 6);
 
 /** The home page for visitors who aren't signed in: search, a clear way into the events, and the latest events as stacked cards. */
 export function PublicHero() {

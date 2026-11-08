@@ -3,9 +3,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { canIssueTickets, eventForBooking, ticketCount } from "@core/bookings";
-import { categories, homeEvents, totalUpcomingEvents } from "@core/data";
+import { categories, homeEvents, latestEvents, totalUpcomingEvents } from "@core/data";
 import { recommend } from "@core/recommendations";
 import { useBookings, useCustomerSettings, useSession } from "@/lib/hooks";
+import { LatestEventsStack } from "@/home/LatestEventsStack";
 import { EventCover } from "@/ui/EventCover";
 import { EventCard } from "@/ui/EventCard";
 import { Screen } from "@/ui/Screen";
@@ -46,6 +47,9 @@ export default function Home() {
         <Ionicons name="search" size={18} color={colors.dim} />
         <Text color={colors.dim}>Search events, venues, cities</Text>
       </Pressable>
+
+      {/* Visitors get the latest events as stacked cards, like the website's home page. */}
+      {!user && <LatestEventsStack events={latestEvents} />}
 
       {user ? (
         next ? (
