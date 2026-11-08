@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Modal, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView } from "expo-camera";
+import { useScanCamera } from "@/lib/camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import { useSession } from "@/lib/hooks";
@@ -134,7 +135,7 @@ export default function Scan() {
   const event = staffEvent(eventId);
   const summary = useSummary(eventId);
   const { online, lastConnected, retry } = useConnection();
-  const [permission, requestPermission] = useCameraPermissions();
+  const { available: cameraOk, permission, request: requestPermission } = useScanCamera();
   const [torch, setTorch] = useState(false);
   const [checking, setChecking] = useState<string>();
   const [typeOpen, setTypeOpen] = useState(false);
@@ -206,7 +207,15 @@ export default function Scan() {
       ) : (
         <>
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0a0908" }}>
-            {permission?.granted ? (
+            {!cameraOk ? (
+              <View style={{ padding: 28, gap: 12, alignItems: "center" }}>
+                <Ionicons name="camera-outline" size={36} color={colors.dim} />
+                <Text center color={colors.muted}>
+                  The camera isn&apos;t available here. In a browser it only works on a secure (https) page; the installed app can always scan. Type the ticket code instead.
+                </Text>
+                <Button title="Type code" small onPress={() => setTypeOpen(true)} />
+              </View>
+            ) : permission?.granted ? (
               <CameraView style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} facing="back" enableTorch={torch} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={checking ? undefined : onScan} accessibilityLabel="Camera for scanning ticket QR codes" />
             ) : (
               <View style={{ padding: 28, gap: 12, alignItems: "center" }}>
@@ -214,7 +223,7 @@ export default function Scan() {
                 <Text center color={colors.muted}>
                   {permission && !permission.canAskAgain ? "Camera access is off. Allow it in Settings, or type the ticket code." : "Allow the camera to scan ticket QR codes."}
                 </Text>
-                {permission && !permission.canAskAgain ? <Button title="Open Settings" small variant="outline" onPress={() => Linking.openSettings().catch(() => undefined)} /> : <Button title="Allow camera" small onPress={() => void requestPermission()} />}
+                {permission && !permission.canAskAgain ? <Button title="Open Settings" small variant="outline" onPress={() => Linking.openSettings().catch(() => undefined)} /> : <Button title="Allow camera" small onPress={requestPermission} />}
               </View>
             )}
 

@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Linking, Platform, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView } from "expo-camera";
+import { useScanCamera } from "@/lib/camera";
 import * as Haptics from "expo-haptics";
 import { ticketsFor } from "@core/bookings";
 import { bookingStore } from "@core/bookingStore";
@@ -29,7 +30,7 @@ const look: Record<Outcome, { color: string; icon: keyof typeof Ionicons.glyphMa
  * ticket used in the same step that answers "admit", and only for a signed-in organizer or door staff account.
  */
 export default function Scanner() {
-  const [permission, requestPermission] = useCameraPermissions();
+  const { available: cameraOk, permission, request: requestPermission } = useScanCamera();
   const [result, setResult] = useState<Result>();
   const [scans, setScans] = useState<Scan[]>([]);
   const [manual, setManual] = useState("");
@@ -80,7 +81,14 @@ export default function Scanner() {
   return (
     <Screen>
       <View style={{ height: 280, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center" }}>
-        {permission?.granted ? (
+        {!cameraOk ? (
+          <View style={{ padding: 24, gap: 12, alignItems: "center" }}>
+            <Ionicons name="camera-outline" size={32} color={colors.dim} />
+            <Text center color={colors.muted}>
+              The camera isn&apos;t available here. In a browser it only works on a secure (https) page; the installed app can always scan. Type the ticket code below.
+            </Text>
+          </View>
+        ) : permission?.granted ? (
           <>
             <CameraView style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={onScan} accessibilityLabel="Camera for scanning ticket QR codes" />
             <View pointerEvents="none" style={{ width: 190, height: 190, borderRadius: 20, borderWidth: 3, borderColor: colors.gold }} />
@@ -99,7 +107,7 @@ export default function Scanner() {
             <Text center color={colors.muted}>
               Allow the camera to scan ticket QR codes.
             </Text>
-            <Button title="Allow camera" small onPress={() => void requestPermission()} />
+            <Button title="Allow camera" small onPress={requestPermission} />
           </View>
         )}
       </View>
