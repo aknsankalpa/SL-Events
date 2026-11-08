@@ -34,6 +34,22 @@ html {
   background: var(--color-page);
 }
 
+/* Nothing may make the page wider than the screen or let it slide sideways on a phone. */
+html,
+body {
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+/* iPhone Safari zooms into text boxes with text under 16px; on phones they get 16px so it never does. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 body {
   background: var(--color-page);
   color: var(--color-text);
