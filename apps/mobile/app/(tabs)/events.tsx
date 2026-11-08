@@ -29,6 +29,7 @@ export default function Events() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ category?: string }>();
   const [query, setQuery] = useState("");
+  const [searchFocus, setSearchFocus] = useState(false);
   const [category, setCategory] = useState<CategoryId | "">((categories.find((c) => c.id === params.category)?.id as CategoryId) ?? "");
   const [city, setCity] = useState("All cities");
 
@@ -43,12 +44,14 @@ export default function Events() {
     <View style={{ flex: 1, backgroundColor: colors.page, paddingTop: insets.top + 12 }}>
       <View style={{ paddingHorizontal: 20, gap: 14 }}>
         <Text variant="display">Events</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingHorizontal: 16 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: searchFocus ? colors.gold : colors.line, backgroundColor: colors.surface, paddingHorizontal: 16 }}>
           <Ionicons name="search" size={18} color={colors.dim} />
           <TextInput
             accessibilityLabel="Search events"
             value={query}
             onChangeText={setQuery}
+            onFocus={() => setSearchFocus(true)}
+            onBlur={() => setSearchFocus(false)}
             placeholder="Search events, venues, cities"
             placeholderTextColor={colors.dim}
             selectionColor={colors.gold}
