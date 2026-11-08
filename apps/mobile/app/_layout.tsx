@@ -6,8 +6,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Montserrat_400Regular, Montserrat_500Medium, Montserrat_700Bold, useFonts } from "@expo-google-fonts/montserrat";
 import { Cinzel_700Bold } from "@expo-google-fonts/cinzel";
 import { prepareStorage } from "@/lib/storage";
+import { fitWebViewport } from "@/lib/webViewport";
 import { SplashScreen } from "@/ui/SplashScreen";
 import { colors, fonts } from "@/theme";
+
+// In the browser preview, keep the page to the visible screen so the tab bar is never hidden behind the browser toolbar.
+fitWebViewport();
 
 export default function RootLayout() {
   const [fontsReady] = useFonts({ Montserrat_400Regular, Montserrat_500Medium, Montserrat_700Bold, Cinzel_700Bold });
