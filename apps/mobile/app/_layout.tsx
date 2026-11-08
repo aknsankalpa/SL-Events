@@ -59,6 +59,8 @@ export default function RootLayout() {
         <Stack.Screen name="booking/[id]/index" options={{ title: "Booking" }} />
         <Stack.Screen name="booking/[id]/proof" options={{ title: "Upload proof" }} />
         <Stack.Screen name="booking/[id]/tickets" options={{ title: "Your tickets" }} />
+        <Stack.Screen name="become-organizer/index" options={{ title: "Become an organizer" }} />
+        <Stack.Screen name="become-organizer/status" options={{ title: "Application status" }} />
         <Stack.Screen name="help" options={{ title: "Help" }} />
         <Stack.Screen name="scanner" options={{ title: "Ticket scanner" }} />
         <Stack.Screen name="+not-found" options={{ title: "Not found" }} />

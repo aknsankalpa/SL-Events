@@ -60,6 +60,8 @@ export default function Profile() {
           <MenuRow icon="help-circle-outline" label="Help and FAQ" sub="Payments, tickets, contact" onPress={() => router.push("/help")} />
           <View style={{ height: 1, backgroundColor: colors.line }} />
           <MenuRow icon="id-card-outline" label="Event staff sign in" sub="For door staff invited by an organizer" onPress={() => router.push("/staff/login")} />
+          <View style={{ height: 1, backgroundColor: colors.line }} />
+          <MenuRow icon="megaphone-outline" label="Become an organizer" sub="Apply to sell tickets for your events" onPress={() => router.push("/become-organizer")} />
         </Card>
       </Screen>
     );
@@ -134,6 +136,12 @@ export default function Profile() {
         <MenuRow icon="help-circle-outline" label="Help and FAQ" sub="Payments, tickets, contact" onPress={() => router.push("/help")} />
         <View style={{ height: 1, backgroundColor: colors.line }} />
         <MenuRow icon="scan-outline" label="Ticket scanner" sub="For organizers and door staff" onPress={() => router.push("/scanner")} />
+        {!rolesFor(user.email).includes("organizer") && (
+          <>
+            <View style={{ height: 1, backgroundColor: colors.line }} />
+            <MenuRow icon="megaphone-outline" label="Become an organizer" sub="Apply to sell tickets for your events" onPress={() => router.push("/become-organizer")} />
+          </>
+        )}
         {otherRole && (
           <>
             <View style={{ height: 1, backgroundColor: colors.line }} />
