@@ -4,7 +4,7 @@ import { HeartHandshake, Landmark, QrCode, Ticket, Users } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { citiesWithEvents, events } from "@/lib/data";
+import { listEvents } from "@/server/events";
 import { organizerProfiles } from "@/lib/organizers";
 
 export const metadata: Metadata = {
@@ -22,7 +22,9 @@ const principles = [
   { Icon: QrCode, title: "Entry without the hassle", body: "Each ticket has its own QR code, checked at the door, so tickets can't be used twice." },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const events = await listEvents();
+  const citiesWithEvents = [...new Set(events.map((e) => e.city).filter(Boolean))];
   return (
     <>
       <PageHeader title="About SL Events" subtitle="Sri Lankan events and entertainment in Korea, in one place." />

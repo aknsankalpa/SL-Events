@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { TicketSelector } from "@/components/booking/TicketSelector";
 import { SeatSelector } from "@/components/seats/SeatSelector";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
-import { events, getEvent } from "@/lib/data";
+import { getEventBySlug, listEventSlugs } from "@/server/events";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export const metadata: Metadata = { title: "Choose your tickets" };
 
-export function generateStaticParams() {
-  return events.map((e) => ({ slug: e.slug }));
+export async function generateStaticParams() {
+  return (await listEventSlugs()).map((slug) => ({ slug }));
 }
 
-export default async function BookTicketsPage({ params }: Props) {
+async function BookContent({ params }: Props) {
   const { slug } = await params;
-  const event = getEvent(slug);
+  const event = await getEventBySlug(slug);
   if (!event) notFound();
 
   return (
@@ -33,5 +34,14 @@ export default async function BookTicketsPage({ params }: Props) {
       </PageHeader>
       {event.seatChart ? <SeatSelector event={event} chart={event.seatChart} /> : <TicketSelector event={event} />}
     </>
+  );
+}
+
+export default function BookTicketsPage({ params }: Props) {
+  // The params are read inside the boundary, so an event published after the build still gets an instant page shell.
+  return (
+    <Suspense fallback={<div className="mx-auto min-h-[60vh] max-w-site px-5 py-10 text-sm text-muted">Loading…</div>}>
+      <BookContent params={params} />
+    </Suspense>
   );
 }

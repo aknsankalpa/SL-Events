@@ -8,7 +8,7 @@
  * Safety: --reset refuses to run unless the database name contains "dev" (pass --force for a deliberate exception),
  * so it can never wipe the live database by accident.
  */
-import { canIssueTickets, seedBookings, type Booking } from "../lib/bookings";
+import { canIssueTickets, effectiveStatus, seedBookings, type Booking } from "../lib/bookings";
 import { events as demoEvents, paymentAccount } from "../lib/data";
 import { applicationStore } from "../lib/organizerApplications";
 import { organizerProfiles } from "../lib/organizers";
@@ -283,6 +283,19 @@ for (const b of seedBookings) {
       sender: b.proof.sender ?? null,
       bank: b.proof.bank ?? null,
     });
+  }
+}
+
+// The demo 'sold' numbers already include the demo bookings, which the website now counts on its own: take them out
+// of 'sold elsewhere' so the totals stay as the demo showed them.
+const now = Date.now();
+for (const b of seedBookings) {
+  if (!holdsSeats(effectiveStatus(b, now))) continue;
+  const eventId = b.eventSlug ? eventIdBySlug.get(b.eventSlug) : undefined;
+  for (const l of b.lines) {
+    const typeId = eventId ? typeIdByEventAndName.get(`${eventId}|${l.ticketName}`) : undefined;
+    const row = typeId ? rows.ticketTypes.find((t) => t.id === typeId) : undefined;
+    if (row) row.soldElsewhere = Math.max(0, (row.soldElsewhere ?? 0) - l.qty);
   }
 }
 

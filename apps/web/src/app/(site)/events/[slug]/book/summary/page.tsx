@@ -4,19 +4,19 @@ import { Suspense } from "react";
 import { BookingSummaryForm } from "@/components/booking/BookingSummaryForm";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
-import { events, getEvent } from "@/lib/data";
+import { getEventBySlug, listEventSlugs } from "@/server/events";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export const metadata: Metadata = { title: "Review your booking" };
 
-export function generateStaticParams() {
-  return events.map((e) => ({ slug: e.slug }));
+export async function generateStaticParams() {
+  return (await listEventSlugs()).map((slug) => ({ slug }));
 }
 
-export default async function BookingSummaryPage({ params }: Props) {
+async function SummaryContent({ params }: Props) {
   const { slug } = await params;
-  const event = getEvent(slug);
+  const event = await getEventBySlug(slug);
   if (!event) notFound();
 
   return (
@@ -31,9 +31,18 @@ export default async function BookingSummaryPage({ params }: Props) {
       >
         <Stepper current={2} />
       </PageHeader>
+      {/* The form reads the chosen tickets or seats from the link, so it waits for the request. */}
       <Suspense fallback={<div className="mx-auto max-w-site px-5 py-10 text-sm text-muted">Loading…</div>}>
         <BookingSummaryForm event={event} />
       </Suspense>
     </>
+  );
+}
+
+export default function BookingSummaryPage({ params }: Props) {
+  return (
+    <Suspense fallback={<div className="mx-auto min-h-[60vh] max-w-site px-5 py-10 text-sm text-muted">Loading…</div>}>
+      <SummaryContent params={params} />
+    </Suspense>
   );
 }

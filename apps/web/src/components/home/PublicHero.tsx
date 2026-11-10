@@ -3,11 +3,11 @@ import { LatestEventsStack } from "@/components/home/LatestEventsStack";
 import { StatIcon } from "@/components/home/StatIcon";
 import { LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { citiesWithEvents, events, latestEvents } from "@/lib/data";
-import { organizerProfiles } from "@/lib/organizers";
+import { useCatalog } from "@/components/events/EventsCatalog";
 
 /** The home page for visitors who aren't signed in: search, a clear way into the events, and the latest events as stacked cards. */
 export function PublicHero() {
+  const { events, latest: latestEvents, cities: citiesWithEvents, organizers } = useCatalog();
 
   return (
     <section className="bg-hero-glow">
@@ -76,7 +76,7 @@ export function PublicHero() {
             {[
               [String(events.length), "upcoming events", "upcoming"],
               [String(citiesWithEvents.length), "cities", "cities"],
-              [String(organizerProfiles.length), "organizers", "organizers"],
+              [String(organizers), "organizers", "organizers"],
             ].map(([value, label, icon]) => (
               <div key={label} className="flex items-center gap-3">
                 <StatIcon name={icon as "upcoming" | "cities" | "organizers"} />

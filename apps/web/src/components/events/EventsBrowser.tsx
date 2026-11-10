@@ -3,7 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Calendar, ChevronLeft, ChevronRight, MapPin, Search, X } from "lucide-react";
-import { categories, citiesWithEvents, events, fromPrice, type CategoryId } from "@/lib/data";
+import { categories, fromPrice, type CategoryId, type EventItem } from "@/lib/data";
+import { useCatalog } from "./EventsCatalog";
 import { EventCard } from "./EventCard";
 import { DatePicker } from "@/components/ui/Pickers";
 import { Select } from "@/components/ui/Select";
@@ -32,7 +33,7 @@ const dateOptions: { value: DateRange; label: string }[] = [
 ];
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const soldOf = (e: (typeof events)[number]) => e.ticketTypes.reduce((n, t) => n + t.sold, 0);
+const soldOf = (e: EventItem) => e.ticketTypes.reduce((n, t) => n + t.sold, 0);
 
 function inRange(iso: string, range: DateRange, now: Date, picked: string) {
   if (range === "any") return true;
@@ -61,6 +62,7 @@ function inRange(iso: string, range: DateRange, now: Date, picked: string) {
 }
 
 export function EventsBrowser() {
+  const { events, cities: citiesWithEvents } = useCatalog();
   const params = useSearchParams();
   const initialCategory = params.get("category") as CategoryId | null;
 
@@ -98,7 +100,7 @@ export function EventsBrowser() {
       if (sort === "popular") return soldOf(b) - soldOf(a);
       return a.startsAt.localeCompare(b.startsAt);
     });
-  }, [query, selected, city, organizer, available, date, pickedDate, price, sort]);
+  }, [events, query, selected, city, organizer, available, date, pickedDate, price, sort]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pages);

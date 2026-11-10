@@ -4,7 +4,7 @@ import { StatIcon } from "@/components/home/StatIcon";
 import { useBookings, useNow } from "@/components/booking/useBookings";
 import { LinkButton } from "@/components/ui/Button";
 import { bookingEvent, canIssueTickets, ticketCount, ticketSummary } from "@/lib/bookings";
-import { citiesWithEvents, events } from "@/lib/data";
+import { useCatalog } from "@/components/events/EventsCatalog";
 import { Select } from "@/components/ui/Select";
 
 /** A reminder for the first booking that needs the customer to act: pay, or fix a failed payment. Nothing when all is well. */
@@ -31,6 +31,7 @@ export function ActionBanner() {
 }
 
 export function Hero({ firstName }: { firstName: string }) {
+  const { events, cities: citiesWithEvents } = useCatalog();
   const { bookings } = useBookings();
   const wallet = bookings.filter((b) => b.status === "confirmed" && canIssueTickets(b)).reduce((n, b) => n + ticketCount(b), 0);
   return (

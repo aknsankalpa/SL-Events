@@ -4,14 +4,15 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { EventCard } from "@/components/events/EventCard";
 import { LinkButton } from "@/components/ui/Button";
-import { citiesWithEvents, events, totalUpcomingEvents } from "@/lib/data";
+import { useCatalog } from "@/components/events/EventsCatalog";
 
-const filters = ["All", ...citiesWithEvents] as const;
 const PREVIEW = 6;
 
 /** Upcoming events, soonest first, with a location filter. The full list with every filter lives on /events. */
 export function EventsNearYou() {
-  const [city, setCity] = useState<(typeof filters)[number]>("All");
+  const { events, cities, total: totalUpcomingEvents } = useCatalog();
+  const filters = ["All", ...cities];
+  const [city, setCity] = useState("All");
   const sorted = [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const inCity = city === "All" ? sorted : sorted.filter((e) => e.city === city);
   const visible = inCity.slice(0, PREVIEW);
