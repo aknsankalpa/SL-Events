@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "9c95d3c5-2f6a-47fa-9c97-50699b94d076",
+  "id": "7609ada1-a097-4967-b4da-d937650494e8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_log": {
@@ -9,7 +9,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -113,7 +113,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -197,7 +197,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -311,7 +311,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -609,7 +609,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -836,7 +836,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1083,7 +1083,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1195,7 +1195,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1291,7 +1291,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1590,7 +1590,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1680,7 +1680,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -1983,7 +1983,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -2094,7 +2094,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -2244,7 +2244,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true
@@ -2474,7 +2474,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "bigint unsigned",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": true

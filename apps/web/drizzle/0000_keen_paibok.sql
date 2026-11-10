@@ -2,7 +2,7 @@
 ALTER DATABASE CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 --> statement-breakpoint
 CREATE TABLE `audit_log` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`actor_user_id` bigint unsigned,
 	`actor_label` varchar(120) NOT NULL,
 	`action` varchar(80) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE `audit_log` (
 );
 --> statement-breakpoint
 CREATE TABLE `auth_codes` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`email` varchar(191) NOT NULL,
 	`purpose` enum('verify_email','reset_password') NOT NULL,
 	`code_hash` varchar(255) NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE `auth_codes` (
 );
 --> statement-breakpoint
 CREATE TABLE `booking_lines` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`booking_id` bigint unsigned NOT NULL,
 	`ticket_type_id` bigint unsigned,
 	`section_id` bigint unsigned,
@@ -37,7 +37,7 @@ CREATE TABLE `booking_lines` (
 );
 --> statement-breakpoint
 CREATE TABLE `bookings` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`ref` varchar(16) NOT NULL,
 	`user_id` bigint unsigned NOT NULL,
 	`event_id` bigint unsigned,
@@ -69,7 +69,7 @@ CREATE TABLE `event_staff` (
 );
 --> statement-breakpoint
 CREATE TABLE `events` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`slug` varchar(120) NOT NULL,
 	`organizer_id` bigint unsigned NOT NULL,
 	`title` varchar(160) NOT NULL,
@@ -98,7 +98,7 @@ CREATE TABLE `events` (
 );
 --> statement-breakpoint
 CREATE TABLE `organizer_applications` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`ref` varchar(16) NOT NULL,
 	`name` varchar(120) NOT NULL,
 	`email` varchar(191) NOT NULL,
@@ -127,7 +127,7 @@ CREATE TABLE `organizer_members` (
 );
 --> statement-breakpoint
 CREATE TABLE `organizers` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`slug` varchar(120) NOT NULL,
 	`name` varchar(160) NOT NULL,
 	`about` text,
@@ -144,7 +144,7 @@ CREATE TABLE `organizers` (
 );
 --> statement-breakpoint
 CREATE TABLE `payment_proofs` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`booking_id` bigint unsigned NOT NULL,
 	`file_path` varchar(255) NOT NULL,
 	`file_name` varchar(160) NOT NULL,
@@ -156,7 +156,7 @@ CREATE TABLE `payment_proofs` (
 );
 --> statement-breakpoint
 CREATE TABLE `scan_log` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`event_id` bigint unsigned NOT NULL,
 	`ticket_id` bigint unsigned,
 	`code` varchar(40) NOT NULL,
@@ -187,7 +187,7 @@ CREATE TABLE `seat_holds` (
 );
 --> statement-breakpoint
 CREATE TABLE `seat_sections` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`event_id` bigint unsigned NOT NULL,
 	`key` varchar(60) NOT NULL,
 	`name` varchar(80) NOT NULL,
@@ -199,7 +199,7 @@ CREATE TABLE `seat_sections` (
 );
 --> statement-breakpoint
 CREATE TABLE `seats` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`event_id` bigint unsigned NOT NULL,
 	`key` varchar(64) NOT NULL,
 	`section_id` bigint unsigned,
@@ -235,7 +235,7 @@ CREATE TABLE `site_settings` (
 );
 --> statement-breakpoint
 CREATE TABLE `support_requests` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`ref` varchar(16) NOT NULL,
 	`user_id` bigint unsigned,
 	`name` varchar(120) NOT NULL,
@@ -250,7 +250,7 @@ CREATE TABLE `support_requests` (
 );
 --> statement-breakpoint
 CREATE TABLE `ticket_types` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`event_id` bigint unsigned NOT NULL,
 	`key` varchar(60) NOT NULL,
 	`name` varchar(80) NOT NULL,
@@ -270,7 +270,7 @@ CREATE TABLE `ticket_types` (
 );
 --> statement-breakpoint
 CREATE TABLE `tickets` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`booking_id` bigint unsigned NOT NULL,
 	`event_id` bigint unsigned,
 	`code` varchar(20) NOT NULL,
@@ -294,7 +294,7 @@ CREATE TABLE `user_roles` (
 );
 --> statement-breakpoint
 CREATE TABLE `users` (
-	`id` serial AUTO_INCREMENT NOT NULL,
+	`id` bigint unsigned AUTO_INCREMENT NOT NULL,
 	`email` varchar(191) NOT NULL,
 	`name` varchar(120) NOT NULL,
 	`password_hash` varchar(255),

@@ -20,13 +20,13 @@ import {
   mysqlEnum,
   mysqlTable,
   primaryKey,
-  serial,
   text,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
-const id = () => serial("id").primaryKey();
+// A plain auto-increment id. (Drizzle's `serial` writes `serial AUTO_INCREMENT`, which MariaDB rejects.)
+const id = () => bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey();
 /** A reference to another table's `serial` id. */
 const ref = (name: string) => bigint(name, { mode: "number", unsigned: true });
 const createdAt = () => datetime("created_at", { mode: "date" }).notNull().default(sql`CURRENT_TIMESTAMP`);
