@@ -1,51 +1,50 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
-import { EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import { EyeOff, Loader2 } from "lucide-react";
 import { EventDetailsView } from "@/components/events/EventDetailsView";
-import { getEvent } from "@/lib/data";
-import { getServerSnapshot, getSnapshot, subscribe } from "@/lib/organizerStore";
+import type { EventItem } from "@/lib/data";
+import type { OrganizerEvent } from "@/lib/organizer";
 import { draftToEventItem } from "@/lib/previewEvent";
 
-/** Sample organizer events that correspond to an event on the public site. */
-const publicSlugFor: Record<string, string> = {
-  "music-night": "sri-lankan-music-night",
-  "baila-night": "baila-night",
-};
+type View = { event: EventItem; coverUrl?: string } | "missing" | null;
 
 /**
- * Renders an organizer's event exactly as the public event page would (and nothing else), from the saved draft.
- * It reads the same browser store as the organizer portal, so it works inside the preview frame.
+ * Renders an organizer's event exactly as the public event page would (and nothing else), from what is saved on the
+ * server. Its organizer and admins (who review it) can open it; anyone else is told there is nothing to preview.
  */
 export function DraftPreview({ id }: { id: string }) {
-  const created = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const hydrated = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
+  const [view, setView] = useState<View>(null);
 
-  const view = useMemo(() => {
-    const draftEvent = created.find((e) => e.id === id);
-    if (draftEvent?.draft) {
-      return { event: draftToEventItem(draftEvent.draft, id), coverUrl: draftEvent.draft.coverUrl || undefined };
-    }
-    const slug = publicSlugFor[id];
-    const live = slug ? getEvent(slug) : undefined;
-    if (live) return { event: live, coverUrl: undefined };
-    return null;
-  }, [created, id]);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/organizer/events/${encodeURIComponent(id)}`, { credentials: "same-origin", cache: "no-store" })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { event?: OrganizerEvent };
+        if (!live) return;
+        const draft = data.event?.draft;
+        setView(res.ok && draft ? { event: draftToEventItem(draft, id), coverUrl: draft.coverUrl || undefined } : "missing");
+      })
+      .catch(() => live && setView("missing"));
+    return () => {
+      live = false;
+    };
+  }, [id]);
 
-  if (!hydrated) return <div className="mx-auto max-w-site px-5 py-16 text-sm text-muted">Loading preview…</div>;
+  if (view === null) {
+    return (
+      <div role="status" className="mx-auto flex max-w-site items-center gap-3 px-5 py-16 text-sm text-muted">
+        <Loader2 size={16} aria-hidden className="animate-spin text-gold" /> Loading preview…
+      </div>
+    );
+  }
 
-  if (!view) {
+  if (view === "missing") {
     return (
       <div className="mx-auto max-w-site px-5 py-20 text-center">
         <EyeOff size={28} className="mx-auto text-dim" aria-hidden />
         <p className="mt-4 text-base font-bold text-text">There&apos;s nothing to preview here</p>
-        <p className="mt-2 text-sm text-muted">
-          This event has no saved content in this browser. Drafts are kept in the browser they were created in.
-        </p>
+        <p className="mt-2 text-sm text-muted">The event doesn&apos;t exist, or you need to log in as its organizer (or an admin) to see it.</p>
       </div>
     );
   }

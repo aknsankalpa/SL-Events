@@ -1,14 +1,13 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Stepper } from "@/components/ui/Stepper";
-import { categoryIdOf, formatEventDate, newId } from "@/lib/organizer";
 import { useOrganizer } from "../OrganizerContext";
 import { OrgPageHeader } from "../ui";
-import { EventDraftProvider, useEventDraft, capacityOf } from "./EventDraft";
+import { EventDraftProvider, useEventDraft } from "./EventDraft";
 
 export const wizardSteps = ["Details", "Tickets & seating", "Pricing", "Review & publish"] as const;
 
@@ -18,30 +17,21 @@ function Frame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { draft } = useEventDraft();
-  const { addEvent } = useOrganizer();
+  const { createEvent } = useOrganizer();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
 
   const step = Math.max(1, routes.indexOf(pathname) + 1);
   const last = step === routes.length;
 
-  function saveDraft() {
-    const cap = draft.sellMode === "seats" ? 0 : capacityOf(draft.ticketTypes).tickets;
-    // TODO: persist the draft through the API.
-    addEvent({
-      id: newId("draft"),
-      title: draft.name.trim() || "Untitled event",
-      category: categoryIdOf(draft.category),
-      dateLabel: formatEventDate(draft.date),
-      shortDate: formatEventDate(draft.date),
-      startsAt: draft.date ? `${draft.date}T${draft.starts || "18:00"}:00+09:00` : undefined,
-      venue: [draft.venue, draft.address].filter(Boolean).join(", ") || undefined,
-      sold: 0,
-      capacity: cap,
-      revenue: 0,
-      pending: 0,
-      status: "draft",
-      draft,
-    });
-    router.push("/organizer/events");
+  async function saveDraft() {
+    // Saved on the server as a draft: only the organizer sees it until it is sent for review.
+    setSaving(true);
+    setError(undefined);
+    const result = await createEvent(draft, false);
+    if (result.ok) return router.push("/organizer/events");
+    setSaving(false);
+    setError(result.error);
   }
 
   return (
@@ -68,8 +58,8 @@ function Frame({ children }: { children: ReactNode }) {
           )}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={saveDraft}>
-            Save as draft
+          <Button variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={() => void saveDraft()} disabled={saving}>
+            {saving ? "Saving…" : "Save as draft"}
           </Button>
           {!last && (
             <Button onClick={() => router.push(routes[step]!)}>
@@ -78,6 +68,11 @@ function Frame({ children }: { children: ReactNode }) {
           )}
         </div>
       </nav>
+      {error && (
+        <p role="alert" className="mt-3 text-right text-xs font-bold text-danger">
+          {error}
+        </p>
+      )}
     </>
   );
 }

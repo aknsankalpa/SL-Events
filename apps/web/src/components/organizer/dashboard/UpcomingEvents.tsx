@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, CalendarPlus, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/StatusBadge";
-import { daysUntil, eventStatusLabel, type OrganizerEvent } from "@/lib/organizer";
+import { daysUntil, eventStatusLabel, type OrganizerEvent, eventStatusTone } from "@/lib/organizer";
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-const tone = { on_sale: "success", draft: "neutral", in_review: "warning" } as const;
+const tone = eventStatusTone;
 
 /** Events that haven't happened yet, soonest first. */
 export function upcomingOf(events: OrganizerEvent[]) {

@@ -1,21 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { CalendarDays, CheckCircle2, MapPin, Send, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatKrw } from "@/lib/format";
-import { categoryIdOf, formatEventDate, newId, seatMapSectionStats, unassignedSeats } from "@/lib/organizer";
-import { htmlToText, isEmptyHtml } from "@/lib/richText";
+import { draftProblems, formatEventDate, seatMapSectionStats } from "@/lib/organizer";
+import { htmlToText } from "@/lib/richText";
 import { useOrganizer } from "../OrganizerContext";
 import { Panel } from "../ui";
-import { capacityOf, useEventDraft, VENUE_LIMIT } from "./EventDraft";
+import { capacityOf, useEventDraft } from "./EventDraft";
 
 const formatDate = (iso: string) => formatEventDate(iso) || "No date yet";
 
 export function ReviewStep() {
   const router = useRouter();
   const { draft } = useEventDraft();
-  const { addEvent } = useOrganizer();
+  const { createEvent } = useOrganizer();
+  const [sending, setSending] = useState(false);
+  const [serverProblem, setServerProblem] = useState<{ error: string; problems?: string[] }>();
 
   const seats = draft.sellMode === "seats";
   const ticketCap = capacityOf(draft.ticketTypes);
@@ -24,35 +27,18 @@ export function ReviewStep() {
   const capacity = seats ? seatCount : ticketCap.tickets;
   const revenue = seats ? seatStats.reduce((n, s) => n + s.revenue, 0) : ticketCap.revenue;
 
-  const problems: string[] = [];
-  if (!draft.name.trim()) problems.push("Add an event name.");
-  if (isEmptyHtml(draft.description)) problems.push("Add a description.");
-  if (!draft.date) problems.push("Choose a date.");
-  if (!draft.venue.trim() || !draft.address.trim()) problems.push("Add the venue name and address.");
-  if (capacity === 0) problems.push(seats ? "Add at least one section with seats." : "Add at least one ticket type.");
-  if (!seats && capacity > VENUE_LIMIT) problems.push(`Ticket quantity is over the venue limit of ${VENUE_LIMIT}.`);
-  if (!seats && draft.ticketTypes.some((t) => !t.name.trim())) problems.push("Give every ticket type a name.");
-  if (seats && unassignedSeats(draft.seatMap) > 0) problems.push("Assign every seat on the seating plan to a section.");
+  // The same list the server checks when the event is submitted.
+  const problems = draftProblems(draft);
 
-  function submit() {
-    if (problems.length) return;
-    // TODO: send the event to the API; it goes to SL Events for review before it goes live.
-    addEvent({
-      id: newId("event"),
-      title: draft.name.trim(),
-      category: categoryIdOf(draft.category),
-      dateLabel: formatDate(draft.date),
-      shortDate: formatDate(draft.date),
-      startsAt: draft.date ? `${draft.date}T${draft.starts || "18:00"}:00+09:00` : undefined,
-      venue: [draft.venue, draft.address].filter(Boolean).join(", ") || undefined,
-      sold: 0,
-      capacity,
-      revenue: 0,
-      pending: 0,
-      status: "in_review",
-      draft,
-    });
-    router.push("/organizer/events");
+  async function submit() {
+    if (problems.length || sending) return;
+    // Saved and sent to SL Events, which reviews it before it goes live.
+    setSending(true);
+    setServerProblem(undefined);
+    const result = await createEvent(draft, true);
+    if (result.ok) return router.push("/organizer/events");
+    setSending(false);
+    setServerProblem({ error: result.error, problems: result.problems });
   }
 
   return (
@@ -140,9 +126,21 @@ export function ReviewStep() {
           </p>
         )}
 
-        <Button size="lg" className="w-full" disabled={problems.length > 0} onClick={submit}>
-          <Send size={16} aria-hidden /> Submit for review
+        <Button size="lg" className="w-full" disabled={problems.length > 0 || sending} onClick={() => void submit()}>
+          <Send size={16} aria-hidden /> {sending ? "Sending…" : "Submit for review"}
         </Button>
+        {serverProblem && (
+          <div role="alert" className="text-xs text-danger">
+            <p className="font-bold">{serverProblem.error}</p>
+            {serverProblem.problems && (
+              <ul className="mt-1 list-disc pl-5">
+                {serverProblem.problems.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <p className="text-center text-[11px] text-dim">SL Events reviews new events within one day before they go live.</p>
       </div>
     </div>

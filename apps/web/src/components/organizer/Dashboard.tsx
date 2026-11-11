@@ -7,14 +7,13 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import {
   dailySales,
   dashboardStats,
-  organizer,
-  organizerEvents,
   orgBookings,
   reportOptions,
   salesByTicket,
   verifyQueue,
 } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
+import { useSession } from "@/components/auth/useSession";
 import { EventCalendar } from "./dashboard/EventCalendar";
 import { ActivityTabs } from "./dashboard/ActivityTabs";
 import { SalesChart } from "./dashboard/SalesChart";
@@ -32,7 +31,8 @@ const periods = [
 const reportIcons = { sales: FileText, bookings: FileText, attendees: Users, verification: CheckCheck } as const;
 
 export function Dashboard() {
-  const { events, pending } = useOrganizer();
+  const { events, pending, organizer: org } = useOrganizer();
+  const { user } = useSession();
   const [days, setDays] = useState(14);
   const [eventFilter, setEventFilter] = useState("all");
 
@@ -53,10 +53,10 @@ export function Dashboard() {
         <div className="relative flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div className="min-w-0">
             <h1 className="font-display text-[22px] font-bold leading-tight text-text sm:text-[26px] lg:text-[22px] xl:text-[26px]">
-              Welcome back, {organizer.name.split(" ")[0]}
+              Welcome back, {(user?.name ?? "").split(" ")[0]}
             </h1>
             <p className="mt-1 text-[13px] text-muted">
-              <span className="font-bold text-amber">{organizer.org}</span> · {dashboardStats.soldThisWeek} tickets sold this week
+              <span className="font-bold text-amber">{org.name}</span> · {dashboardStats.soldThisWeek} tickets sold this week
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -152,6 +152,7 @@ function SelectPill({
 }
 
 function ReportMenu({ periodLabel }: { periodLabel: string }) {
+  const { events } = useOrganizer();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -172,7 +173,7 @@ function ReportMenu({ periodLabel }: { periodLabel: string }) {
     if (id === "sales") {
       downloadCsv("sales-summary.csv", [
         ["Event", "Date", "Sold", "Capacity", "Revenue (KRW)"],
-        ...organizerEvents.map((e) => [e.title, e.shortDate, e.sold, e.capacity, e.revenue]),
+        ...events.map((e) => [e.title, e.shortDate, e.sold, e.capacity, e.revenue]),
       ]);
     } else if (id === "bookings") {
       downloadCsv("all-bookings.csv", [

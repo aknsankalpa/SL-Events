@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { EventEditor } from "@/components/organizer/EventEditor";
-import { organizerEvents } from "@/lib/organizer";
 
 export const metadata: Metadata = { title: "Edit event" };
-
-export function generateStaticParams() {
-  return organizerEvents.map((e) => ({ id: e.id }));
-}
 
 async function Editor({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

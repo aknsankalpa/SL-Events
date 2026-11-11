@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { auth, useSession } from "@/components/auth/useSession";
 import { profileInitials } from "@/lib/profile";
 import { OrganizerProvider, useOrganizer } from "./OrganizerContext";
 import { useOrganizerProfile } from "./useOrganizerProfile";
@@ -44,8 +45,10 @@ function isActive(pathname: string, href: string) {
 function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { pending } = useOrganizer();
+  const { pending, organizer } = useOrganizer();
   const { profile } = useOrganizerProfile();
+  const { user } = useSession();
+  const fullName = user?.name ?? profile.fullName;
   const profileActive = isActive(pathname, "/organizer/profile");
 
   return (
@@ -98,19 +101,21 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
               // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
               <img src={profile.logoUrl} alt="" className="size-full object-cover" />
             ) : (
-              profileInitials(profile)
+              profileInitials({ fullName })
             )}
           </span>
           <span className="min-w-0 flex-1 leading-tight">
-            <span className="block truncate text-[13px] font-bold text-text">{profile.fullName}</span>
-            <span className="mt-0.5 block truncate text-[11px] text-dim">{profile.orgName}</span>
+            <span className="block truncate text-[13px] font-bold text-text">{fullName}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-dim">{organizer.name}</span>
           </span>
         </Link>
         <button
           type="button"
           aria-label="Log out"
-          // TODO: end the organizer session via the auth API.
-          onClick={() => router.push("/login")}
+          onClick={async () => {
+            await auth.logout();
+            router.push("/login");
+          }}
           className="rounded-lg p-2 text-muted hover:text-danger"
         >
           <LogOut size={16} />

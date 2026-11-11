@@ -16,7 +16,7 @@ import { gridToLayout } from "@/lib/seating";
 
 export type { DraftTicketType, SeatMapState, EventDraft };
 
-export const VENUE_LIMIT = 500;
+export { VENUE_LIMIT } from "@/lib/organizer";
 
 const sampleChart = gridToLayout(seatSectionTemplates["Theatre with balcony"]!, ["H8", "H9"], ["A1", "A16"]);
 

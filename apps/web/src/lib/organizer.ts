@@ -100,8 +100,13 @@ export type EventDraft = {
   pricingReviewed: boolean;
 };
 
+/** Where an event is in its life. Organizers write drafts and submit them; SL Events publishes (on sale) or asks for changes. */
+export type OrgEventStatus = "draft" | "in_review" | "changes_requested" | "on_sale" | "paused" | "unpublished" | "cancelled" | "ended";
+
 export type OrganizerEvent = {
   id: string;
+  /** The public page address once the event has one (/events/<slug>). */
+  slug?: string;
   title: string;
   category: CategoryId;
   dateLabel: string; // "Sat, 14 Nov 2026"
@@ -113,7 +118,9 @@ export type OrganizerEvent = {
   capacity: number;
   revenue: number;
   pending: number;
-  status: "on_sale" | "draft" | "in_review";
+  status: OrgEventStatus;
+  /** SL Events' note when it asked for changes, unpublished or cancelled the event. */
+  statusNote?: string;
   /** Everything the organizer entered, for events created in the wizard. Drives preview and re-editing. */
   draft?: EventDraft;
 };
@@ -239,11 +246,58 @@ export const organizerEvents: OrganizerEvent[] = [
   },
 ];
 
-export const eventStatusLabel: Record<OrganizerEvent["status"], string> = {
+export const eventStatusLabel: Record<OrgEventStatus, string> = {
   on_sale: "On sale",
   draft: "Draft",
   in_review: "In review",
+  changes_requested: "Changes requested",
+  paused: "Sales paused",
+  unpublished: "Unpublished",
+  cancelled: "Cancelled",
+  ended: "Ended",
 };
+
+/** The badge colour for each status. */
+export const eventStatusTone: Record<OrgEventStatus, "success" | "warning" | "neutral" | "danger"> = {
+  on_sale: "success",
+  draft: "neutral",
+  in_review: "warning",
+  changes_requested: "danger",
+  paused: "warning",
+  unpublished: "neutral",
+  cancelled: "danger",
+  ended: "neutral",
+};
+
+/** Statuses in which the organizer may still change everything and send the event (again) for review. */
+export const editableBeforeReview: OrgEventStatus[] = ["draft", "changes_requested"];
+
+/** Most tickets one event may sell when it isn't using a seat chart. */
+export const VENUE_LIMIT = 500;
+
+const plainText = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim();
+
+/**
+ * What still has to be filled in before an event can go to SL Events for review. The review step shows this list and
+ * the server checks the same list when the event is submitted.
+ */
+export function draftProblems(draft: EventDraft): string[] {
+  const seats = draft.sellMode === "seats";
+  const ticketCap = capacityOf(draft.ticketTypes).tickets;
+  const seatCap = draft.seatMap.sections.reduce((n, s) => n + seatMapSectionStats(draft.seatMap, s).free, 0);
+  const capacity = seats ? seatCap : ticketCap;
+  const problems: string[] = [];
+  if (!draft.name.trim()) problems.push("Add an event name.");
+  if (!plainText(draft.description)) problems.push("Add a description.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) problems.push("Choose a date.");
+  if (!draft.venue.trim() || !draft.address.trim()) problems.push("Add the venue name and address.");
+  if (capacity === 0) problems.push(seats ? "Add at least one section with seats." : "Add at least one ticket type.");
+  if (!seats && capacity > VENUE_LIMIT) problems.push(`Ticket quantity is over the venue limit of ${VENUE_LIMIT}.`);
+  if (!seats && draft.ticketTypes.some((t) => !t.name.trim())) problems.push("Give every ticket type a name.");
+  if (seats && !draft.seatMap.layout) problems.push("Build the seating plan.");
+  if (seats && unassignedSeats(draft.seatMap) > 0) problems.push("Assign every seat on the seating plan to a section.");
+  return problems;
+}
 
 export const pendingPaymentsTotal = 12;
 

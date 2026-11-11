@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   dashboardStats,
   seedApplications,
   seedApproved,
-  seedEvents,
   seedRejected,
   seedSuspended,
   seedUsers,
@@ -86,11 +85,64 @@ export const statusLabel: Record<AppStatus, string> = {
   suspended: "Suspended",
 };
 
-/** Events with the admin's decisions applied. */
+/* ---------- events, from the server ---------- */
+
+type EventsState = { list: AdminEvent[]; loaded: boolean; error?: string };
+let eventsState: EventsState = { list: [], loaded: false };
+const EVENTS_SERVER: EventsState = { list: [], loaded: false };
+const eventListeners = new Set<() => void>();
+let eventsLoading: Promise<void> | null = null;
+
+/** Asks the server for every event again (after a decision, or when a page opens). */
+export function refreshAdminEvents(): Promise<void> {
+  eventsLoading ??= fetch("/api/admin/events", { credentials: "same-origin", cache: "no-store" })
+    .then(async (res) => {
+      const data = (await res.json().catch(() => ({}))) as { events?: AdminEvent[]; error?: string };
+      eventsState = res.ok ? { list: data.events ?? [], loaded: true } : { ...eventsState, loaded: true, error: data.error ?? "Couldn't load events." };
+    })
+    .catch(() => {
+      eventsState = { ...eventsState, loaded: true, error: "We couldn't reach SL Events." };
+    })
+    .finally(() => {
+      eventsLoading = null;
+      eventListeners.forEach((l) => l());
+    });
+  return eventsLoading;
+}
+
+/** Every event on the platform, as the server has it. */
 export function useAdminEvents() {
   const state = useAdminState();
-  const events = useMemo<AdminEvent[]>(() => seedEvents.map((e) => ({ ...e, title: state.eventTitles[e.id] ?? e.title, status: state.eventStatus[e.id] ?? e.status })), [state.eventStatus, state.eventTitles]);
-  return { events, dismissed: state.reportsDismissed };
+  const snapshot = useSyncExternalStore(
+    (l) => {
+      eventListeners.add(l);
+      return () => eventListeners.delete(l);
+    },
+    () => eventsState,
+    () => EVENTS_SERVER,
+  );
+  useEffect(() => {
+    if (!eventsState.loaded) void refreshAdminEvents();
+  }, []);
+  return { events: snapshot.list, loaded: snapshot.loaded, error: snapshot.error, dismissed: state.reportsDismissed };
+}
+
+/** Carries out a decision on the server, then reloads the list. */
+export async function decideEvent(id: string, decision: "approve" | "changes" | "unpublish" | "republish" | "cancel" | "rename", text = ""): Promise<{ ok: true; cancelledBookings?: number } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`/api/admin/events/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision, text }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; cancelledBookings?: number };
+    await refreshAdminEvents();
+    return res.ok ? { ok: true, cancelledBookings: data.cancelledBookings } : { ok: false, error: data.error ?? "That didn't work. Try again." };
+  } catch {
+    return { ok: false, error: "We couldn't reach SL Events." };
+  }
 }
 
 /** Staff and customers, with changed roles and deactivations applied. */

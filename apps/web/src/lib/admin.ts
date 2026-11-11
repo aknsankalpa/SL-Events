@@ -188,6 +188,8 @@ export type AdminEvent = {
   slug?: string;
   inventory: { name: string; price: number; sold: number; capacity: number }[];
   held: number;
+  /** Why the event was sent back, unpublished or cancelled. */
+  statusNote?: string;
   reports?: { count: number; text: string; detail: string };
 };
 

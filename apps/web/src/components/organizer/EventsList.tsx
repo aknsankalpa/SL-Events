@@ -7,28 +7,31 @@ import { EventThumb } from "@/components/ui/Card";
 import { LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
 import { formatKrw } from "@/lib/format";
-import { eventStatusLabel, type OrganizerEvent } from "@/lib/organizer";
+import { eventStatusLabel, type OrganizerEvent, eventStatusTone } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 import { OrgPageHeader, Panel } from "./ui";
 
-const tone = { on_sale: "success", draft: "neutral", in_review: "warning" } as const;
+const tone = eventStatusTone;
 
-type TabId = "all" | OrganizerEvent["status"];
+type TabId = "all" | "on_sale" | "in_review" | "draft" | "stopped";
 
-const tabs: { id: TabId; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "on_sale", label: "On sale" },
-  { id: "in_review", label: "In review" },
-  { id: "draft", label: "Drafts" },
+/** Each tab gathers the statuses that belong together: a paused event is still on sale, a sent-back one is a draft again. */
+const tabs: { id: TabId; label: string; statuses: OrganizerEvent["status"][] }[] = [
+  { id: "all", label: "All", statuses: [] },
+  { id: "on_sale", label: "On sale", statuses: ["on_sale", "paused"] },
+  { id: "in_review", label: "In review", statuses: ["in_review"] },
+  { id: "draft", label: "Drafts", statuses: ["draft", "changes_requested"] },
+  { id: "stopped", label: "Ended or stopped", statuses: ["unpublished", "cancelled", "ended"] },
 ];
+const inTab = (id: TabId, status: OrganizerEvent["status"]) => id === "all" || tabs.find((t) => t.id === id)!.statuses.includes(status);
 
 /** Not in the Figma file: the index the Events menu item lands on, with draft review. */
 export function EventsList() {
   const { events, setEventId } = useOrganizer();
   const [tab, setTab] = useState<TabId>("all");
 
-  const visible = events.filter((e) => tab === "all" || e.status === tab);
-  const count = (id: TabId) => (id === "all" ? events.length : events.filter((e) => e.status === id).length);
+  const visible = events.filter((e) => inTab(tab, e.status));
+  const count = (id: TabId) => events.filter((e) => inTab(id, e.status)).length;
 
   return (
     <>

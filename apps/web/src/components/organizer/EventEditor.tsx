@@ -23,9 +23,7 @@ import { Field } from "@/components/ui/Field";
 import { RichTextEditor } from "@/components/ui/RichTextEditorLazy";
 import { Badge } from "@/components/ui/StatusBadge";
 import { fileToCoverDataUrl } from "@/lib/image";
-import { bookingStore } from "@/lib/bookingStore";
-import { changeHistory, eventCategories, eventStatusLabel, formatEventDate, seatMapSectionStats, type EventDraft, type OrganizerEvent } from "@/lib/organizer";
-import { takenSeatIds } from "@/lib/seating";
+import { changeHistory, eventCategories, eventStatusLabel, eventStatusTone, type EventDraft, type OrganizerEvent } from "@/lib/organizer";
 import { EventDraftProvider } from "./wizard/EventDraft";
 import { SeatMapEditor } from "./wizard/SeatMapEditor";
 import { useOrganizer } from "./OrganizerContext";
@@ -95,7 +93,7 @@ export function EventEditor({ id }: { id: string }) {
     return (
       <Panel className="p-10 text-center">
         <p className="text-base font-bold text-text">Event not found</p>
-        <p className="mt-2 text-sm text-muted">Drafts are kept in the browser they were created in.</p>
+        <p className="mt-2 text-sm text-muted">It may belong to a different organizer, or the link may be wrong.</p>
         <LinkButton href="/organizer/events" className="mt-5">
           Back to events
         </LinkButton>
@@ -106,7 +104,7 @@ export function EventEditor({ id }: { id: string }) {
 }
 
 function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
-  const { updateEvent } = useOrganizer();
+  const { saveEvent, setEventStatus } = useOrganizer();
 
   const initial = useMemo<Form>(() => {
     const d = event.draft;
@@ -155,9 +153,11 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
   const [baseline, setBaseline] = useState<Form>(initial);
   const [notify, setNotify] = useState(true);
   const [message, setMessage] = useState("");
-  const [paused, setPaused] = useState(false);
+  const paused = event.status === "paused";
+  const cancelled = event.status === "cancelled" || event.status === "ended";
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
   const [toast, setToast] = useState<string>();
   const [cover, setCover] = useState({
     name: event.draft ? event.draft.coverName || "No cover image yet" : "cover-music-night.jpg",
@@ -206,40 +206,41 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
     ...changeHistory.map((h) => ({ ...h, pending: false })),
   ];
 
-  function save() {
-    // Seats that customers already hold can't be taken away or blocked: their bookings point at them.
-    if (seated && seatsChanged && seatMap) {
-      const held = takenSeatIds(bookingStore.getSnapshot(), id);
-      const sellable = new Set((seatMap.layout?.seats ?? []).filter((s) => s.section && !s.blocked).map((s) => s.uid));
-      const lost = [...held].filter((seatId) => !sellable.has(seatId));
-      if (lost.length > 0) {
-        setSeatError(`${lost.length} seat${lost.length === 1 ? " is" : "s are"} already booked, so ${lost.length === 1 ? "it" : "they"} can't be deleted, blocked or left without a section. Put ${lost.length === 1 ? "it" : "them"} back and save again.`);
-        return;
-      }
-    }
+  async function save() {
+    if (!event.draft || saving) return;
+    // The server keeps booked seats on the chart and won't let a ticket type drop below what is sold; it says why.
     setSeatError(undefined);
-    // TODO: persist through the API and queue the notification email when `notify` is on.
-    const patch: Partial<OrganizerEvent> = { title: form.name.trim() || event.title };
-    if (event.draft) {
-      patch.draft = { ...event.draft, ...form, ...(seatMap ? { seatMap } : {}), coverUrl: cover.url, coverName: cover.url ? cover.name : "" };
-      if (seated && seatMap) patch.capacity = seatMap.sections.reduce((n, sec) => n + seatMapSectionStats(seatMap, sec).free, 0);
-      patch.dateLabel = formatEventDate(form.date);
-      patch.shortDate = patch.dateLabel;
-      patch.startsAt = form.date ? `${form.date}T${form.starts || "18:00"}:00+09:00` : undefined;
-      patch.venue = [form.venue, form.address].filter(Boolean).join(", ") || undefined;
+    setSaving(true);
+    const draft: EventDraft = { ...event.draft, ...form, ...(seatMap ? { seatMap } : {}), coverUrl: cover.url, coverName: cover.url ? cover.name : "" };
+    const result = await saveEvent(id, draft);
+    setSaving(false);
+    if (!result.ok) {
+      setSeatError([result.error, ...(result.problems ?? [])].join(" "));
+      return;
     }
-    updateEvent(id, patch);
     setBaseline(form);
     setSeatBaseline(seatMap);
-    setToast(
-      sensitive && notify
-        ? `Saved. ${event.sold} ticket holders will be emailed about the change.`
-        : "Saved.",
-    );
+    // TODO: email ticket holders when `notify` is on, once email sending is set up.
+    setToast(sensitive && notify && event.sold > 0 ? "Saved. Emails to ticket holders aren't sent automatically yet, so let them know yourself." : "Saved.");
     setMessage("");
   }
 
-  const statusLabel = cancelled ? "Cancelled" : paused ? "Published · sales paused" : event.status === "on_sale" ? "Published · on sale" : eventStatusLabel[event.status];
+  async function changeStatus(action: "pause" | "resume" | "cancel") {
+    setStatusBusy(true);
+    const result = await setEventStatus(id, action);
+    setStatusBusy(false);
+    setCancelOpen(false);
+    if (!result.ok) return setSeatError(result.error);
+    setToast(
+      action === "cancel"
+        ? `Event cancelled${result.cancelledBookings ? `, with ${result.cancelledBookings} booking${result.cancelledBookings === 1 ? "" : "s"}` : ""}.`
+        : action === "pause"
+          ? "Ticket sales paused."
+          : "Ticket sales resumed.",
+    );
+  }
+
+  const statusLabel = paused ? "Published · sales paused" : event.status === "on_sale" ? "Published · on sale" : eventStatusLabel[event.status];
 
   return (
     <>
@@ -247,17 +248,17 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
         crumbs={[{ label: "Events", href: "/organizer/events" }, { label: event.title }, { label: "Edit" }]}
         title="Edit event"
         titleAside={
-          <Badge tone={cancelled ? "danger" : paused ? "warning" : "success"} dot>
+          <Badge tone={eventStatusTone[event.status]} dot>
             {statusLabel}
           </Badge>
         }
         actions={
           <>
-            <LinkButton href={id === "music-night" ? "/events/sri-lankan-music-night" : "/events"} variant="outline" className="border-line bg-surface text-text hover:bg-surface-2">
+            <LinkButton href={event.slug ? `/events/${event.slug}` : `/organizer/events/${id}/preview`} variant="outline" className="border-line bg-surface text-text hover:bg-surface-2">
               <Eye size={16} aria-hidden /> Preview
             </LinkButton>
-            <Button onClick={save} disabled={!dirty || cancelled}>
-              Save changes
+            <Button onClick={() => void save()} disabled={!dirty || cancelled || saving}>
+              {saving ? "Saving…" : "Save changes"}
             </Button>
           </>
         }
@@ -286,6 +287,20 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
       {toast && (
         <p role="status" className="mb-4 flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-sm text-text">
           <CheckCircle2 size={16} aria-hidden className="text-success" /> {toast}
+        </p>
+      )}
+      {event.statusNote && ["changes_requested", "unpublished", "cancelled"].includes(event.status) && (
+        <p className="mb-4 flex items-start gap-3 rounded-xl border border-amber/40 bg-amber/10 px-4 py-3 text-[13px] text-text">
+          <AlertTriangle size={16} aria-hidden className="mt-0.5 shrink-0 text-amber" />
+          <span>
+            <strong>Note from SL Events:</strong> {event.statusNote}
+          </span>
+        </p>
+      )}
+      {seatError && !seated && (
+        <p role="alert" className="mb-4 flex items-start gap-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-text">
+          <AlertTriangle size={16} aria-hidden className="mt-0.5 shrink-0 text-danger" />
+          {seatError}
         </p>
       )}
 
@@ -497,8 +512,8 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
             <Button
               variant="outline"
               className="mt-4 w-full border-line text-text hover:bg-surface-2"
-              disabled={cancelled}
-              onClick={() => setPaused((p) => !p)}
+              disabled={statusBusy || (event.status !== "on_sale" && event.status !== "paused")}
+              onClick={() => void changeStatus(paused ? "resume" : "pause")}
             >
               {paused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
               {paused ? "Resume ticket sales" : "Pause ticket sales"}
@@ -506,13 +521,13 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
             <Button
               variant="outline"
               className="mt-3 w-full border-danger/60 text-danger hover:bg-danger/10"
-              disabled={cancelled}
+              disabled={cancelled || statusBusy}
               onClick={() => setCancelOpen(true)}
             >
               Cancel event
             </Button>
             <p className="mt-3 text-[11px] leading-relaxed text-dim">
-              Cancelling takes the event off sale and cancels all 118 paid bookings. Buyers are told by email.
+              Cancelling takes the event off sale and cancels every booking ({event.sold} tickets).
             </p>
           </section>
         </div>
@@ -549,7 +564,7 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
 
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel this event?">
         <p className="text-sm leading-relaxed text-muted">
-          <strong className="text-text">{event.title}</strong> will be taken off sale and all 118 paid bookings will be cancelled. Buyers are told by email.
+          <strong className="text-text">{event.title}</strong> will be taken off sale and every booking ({event.sold} tickets) will be cancelled.
           This can&apos;t be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
@@ -558,14 +573,10 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
           </Button>
           <Button
             variant="danger"
-            onClick={() => {
-              // TODO: call the cancel-event API.
-              setCancelled(true);
-              setCancelOpen(false);
-              setToast("Event cancelled. Buyers are being told.");
-            }}
+            disabled={statusBusy}
+            onClick={() => void changeStatus("cancel")}
           >
-            Cancel event
+            {statusBusy ? "Cancelling…" : "Cancel event"}
           </Button>
         </div>
       </Dialog>

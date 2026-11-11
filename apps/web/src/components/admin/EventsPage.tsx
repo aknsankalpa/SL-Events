@@ -8,12 +8,12 @@ import { CategoryIcon, coverGradients, coverIconClass } from "@/components/event
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/StatusBadge";
-import { eventTabCounts, seedEvents, type AdminEvent, type AdminEventStatus } from "@/lib/admin";
+import type { AdminEvent, AdminEventStatus } from "@/lib/admin";
 import type { CategoryId } from "@/lib/data";
 import { logAudit, updateAdmin } from "@/lib/adminStore";
 import { formatKrw } from "@/lib/format";
 import { AdminHeader, Dialog, Meter, Panel, Tabs, Toast } from "./ui";
-import { useAdminEvents } from "./useAdmin";
+import { decideEvent, useAdminEvents } from "./useAdmin";
 
 type Tab = "all" | AdminEventStatus;
 type Action = "unpublish" | "cancel" | "changes" | "edit" | null;
@@ -29,58 +29,60 @@ const statusMeta: Record<AdminEventStatus, { label: string; tone: "success" | "w
 
 export function EventsPage() {
   const params = useSearchParams();
-  const { events, dismissed } = useAdminEvents();
+  const { events, dismissed, loaded, error: loadError } = useAdminEvents();
   const initialTab = params.get("tab");
   const [tab, setTab] = useState<Tab>(["review", "live", "draft", "unpublished", "cancelled", "ended"].includes(initialTab ?? "") ? (initialTab as Tab) : "all");
   const [organizer, setOrganizer] = useState("");
   const [query, setQuery] = useState(params.get("q") ?? "");
-  const [selectedId, setSelectedId] = useState(params.get("event") ?? "baila-night");
+  const [selectedId, setSelectedId] = useState(params.get("event") ?? "");
   const [action, setAction] = useState<Action>(null);
   const [reason, setReason] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string>();
   const [toast, setToast] = useState<string>();
+  const [busy, setBusy] = useState(false);
 
-  const organizers = [...new Set(seedEvents.map((e) => e.organizer))];
+  const organizers = [...new Set(events.map((e) => e.organizer))].sort();
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     return events.filter((e) => (tab === "all" || e.status === tab) && (!organizer || e.organizer === organizer) && (!q || `${e.title} ${e.organizer}`.toLowerCase().includes(q)));
   }, [events, tab, organizer, query]);
   const selected = events.find((e) => e.id === selectedId) ?? list[0];
 
-  const count = (t: Tab) => (t === "all" ? eventTabCounts.all : eventTabCounts[t] - seedEvents.filter((e) => e.status === t).length + events.filter((e) => e.status === t).length);
+  const count = (t: Tab) => (t === "all" ? events.length : events.filter((e) => e.status === t).length);
   const say = (m: string) => {
     setToast(m);
     setTimeout(() => setToast(undefined), 3200);
   };
 
-  function setStatus(e: AdminEvent, status: AdminEventStatus, verb: string, why?: string) {
-    // TODO: the API changes the event, tells the organizer, and for a cancellation tells every buyer.
-    updateAdmin((s) => ({ ...s, eventStatus: { ...s.eventStatus, [e.id]: status } }));
-    logAudit({
-      type: "decision",
-      action: `${verb} ${e.title}`,
-      item: `event: ${e.id}`,
-      detail: { changes: [{ label: "Status", from: statusMeta[e.status].label, to: statusMeta[status].label }, ...(why ? [{ label: "Reason", from: "—", to: why }] : [])] },
-    });
-    say(`${verb} ${e.title}.`);
+  /** Sends the decision to the server, which changes the event, records it in the audit log and updates the website. */
+  async function setStatus(e: AdminEvent, decision: "approve" | "republish" | "unpublish" | "cancel" | "changes", done: string, why = "") {
+    setBusy(true);
+    const result = await decideEvent(e.id, decision, why);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      say(result.error);
+      return false;
+    }
+    const cancelled = result.cancelledBookings;
+    say(decision === "cancel" && cancelled ? `${done} ${cancelled} booking${cancelled === 1 ? " was" : "s were"} cancelled.` : done);
+    return true;
   }
 
-  function confirm() {
-    if (!selected || !action) return;
+  async function confirm() {
+    if (!selected || !action || busy) return;
     if (action === "edit") {
       if (!title.trim()) return setError("The title can't be empty.");
-      updateAdmin((s) => ({ ...s, eventTitles: { ...s.eventTitles, [selected.id]: title.trim() } }));
-      logAudit({ type: "content", action: `Edited the title of ${selected.title}`, item: `event: ${selected.id}`, detail: { changes: [{ label: "Title", from: selected.title, to: title.trim() }] } });
+      setBusy(true);
+      const result = await decideEvent(selected.id, "rename", title.trim());
+      setBusy(false);
+      if (!result.ok) return setError(result.error);
       say("Saved.");
     } else {
       if (!reason.trim()) return setError("Give a reason first. The organizer sees it.");
-      if (action === "unpublish") setStatus(selected, "unpublished", "Unpublished", reason.trim());
-      if (action === "cancel") setStatus(selected, "cancelled", "Cancelled", reason.trim());
-      if (action === "changes") {
-        logAudit({ type: "decision", action: `Asked for changes to ${selected.title}`, item: `event: ${selected.id}`, detail: { changes: [{ label: "Note to organizer", from: "—", to: reason.trim() }] } });
-        say("Sent to the organizer.");
-      }
+      const done = { unpublish: `Unpublished ${selected.title}.`, cancel: `Cancelled ${selected.title}.`, changes: "Sent to the organizer." }[action];
+      if (!(await setStatus(selected, action, done, reason.trim()))) return;
     }
     close();
   }
@@ -199,7 +201,7 @@ export function EventsPage() {
                 {list.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-center text-sm text-muted">
-                      No events match.
+                      {!loaded ? "Loading events…" : (loadError ?? "No events match.")}
                     </td>
                   </tr>
                 )}
@@ -275,10 +277,15 @@ export function EventsPage() {
                 </div>
               )}
 
+              {selected.statusNote && (
+                <p className="mt-4 rounded-lg border border-line bg-surface-2 p-3 text-[11px] leading-relaxed text-muted">
+                  <strong className="text-text">Last note to the organizer:</strong> {selected.statusNote}
+                </p>
+              )}
               <h3 className="mb-3 mt-5 text-[10px] font-bold uppercase tracking-widest text-dim">Actions</h3>
               {selected.status === "review" && (
                 <div className="mb-2 grid grid-cols-2 gap-2">
-                  <Button size="sm" onClick={() => setStatus(selected, "live", "Approved and published")}>
+                  <Button size="sm" disabled={busy} onClick={() => void setStatus(selected, "approve", `Published ${selected.title}. It is on the website now.`)}>
                     Approve and publish
                   </Button>
                   <Button size="sm" variant="outline" className="border-line text-text hover:bg-surface-2" onClick={() => open("changes")}>
@@ -292,16 +299,16 @@ export function EventsPage() {
                     <Eye size={14} aria-hidden /> View page
                   </LinkButton>
                 ) : (
-                  <Button size="sm" variant="outline" disabled className="border-line">
-                    <Eye size={14} aria-hidden /> View page
-                  </Button>
+                  <LinkButton href={`/preview/events/${selected.id}`} size="sm" variant="outline" className="border-line text-text hover:bg-surface-2">
+                    <Eye size={14} aria-hidden /> Preview
+                  </LinkButton>
                 )}
                 <Button size="sm" variant="outline" className="border-line text-text hover:bg-surface-2" onClick={() => open("edit")}>
                   <Pencil size={14} aria-hidden /> Edit content
                 </Button>
               </div>
               {selected.status === "unpublished" ? (
-                <Button size="sm" variant="outline" className="mt-2 w-full border-line text-text hover:bg-surface-2" onClick={() => setStatus(selected, "live", "Republished")}>
+                <Button size="sm" variant="outline" disabled={busy} className="mt-2 w-full border-line text-text hover:bg-surface-2" onClick={() => void setStatus(selected, "republish", `Published ${selected.title} again.`)}>
                   <Eye size={14} aria-hidden /> Publish again
                 </Button>
               ) : (
@@ -311,7 +318,7 @@ export function EventsPage() {
                   </Button>
                 )
               )}
-              {["live", "review", "unpublished"].includes(selected.status) && (
+              {["live", "review", "unpublished", "draft"].includes(selected.status) && (
                 <Button size="sm" variant="outline" className="mt-2 w-full border-danger/60 text-danger hover:bg-danger/10" onClick={() => open("cancel")}>
                   Cancel event{selected.sold > 0 ? ` and tell ${selected.sold} buyers` : ""}
                 </Button>
@@ -354,7 +361,7 @@ export function EventsPage() {
           <Button variant="ghost" onClick={close}>
             Back
           </Button>
-          <Button variant={action === "cancel" ? "danger" : "primary"} onClick={confirm}>
+          <Button variant={action === "cancel" ? "danger" : "primary"} disabled={busy} onClick={() => void confirm()}>
             {action === "edit" ? "Save" : action === "cancel" ? "Cancel event" : action === "unpublish" ? "Unpublish" : "Send"}
           </Button>
         </div>

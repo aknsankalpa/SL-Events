@@ -206,6 +206,8 @@ export const events = mysqlTable(
     contact: json("contact").$type<{ about?: string; email?: string; phone?: string; link?: string }>(),
     /** Event-day settings (check-in opens, late cut-off, re-entry, ...). */
     operations: json("operations").$type<Record<string, unknown>>(),
+    /** What the organizer typed that customers don't see as a field of its own: tags, the full address, file names. */
+    extras: json("extras").$type<{ tags?: string; address?: string; hostName?: string; coverName?: string; pricingReviewed?: boolean; template?: string }>(),
     /** Why an admin asked for changes, unpublished or cancelled it. */
     statusNote: text("status_note"),
     submittedAt: datetime("submitted_at", { mode: "date" }),

@@ -50,3 +50,34 @@ export async function readUpload(relative: string): Promise<Buffer | null> {
     return null;
   }
 }
+
+/* ---------- public pictures (event covers, seating plans) ---------- */
+
+/** Pictures customers may see are kept under media/ and served at /media/... by app/media/[...path]/route.ts. */
+const MEDIA = "media";
+const IMAGE_KINDS = new Set(["jpg", "png"]);
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Takes what the editor sent for a picture: a "data:" URL (a new picture) is stored and its /media/ address returned;
+ * an address already under /media/ is kept; anything else (empty, or an outside link) becomes null.
+ */
+export async function storeImage(folder: string, value: string | undefined | null): Promise<string | null> {
+  if (!value) return null;
+  if (value.startsWith(`/${MEDIA}/`)) return value;
+  const m = value.match(/^data:image\/(?:jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return null;
+  const bytes = Buffer.from(m[1]!, "base64");
+  if (bytes.byteLength > MAX_IMAGE_BYTES) throw new Error("That picture is too large (over 5 MB).");
+  const kind = sniff(bytes);
+  if (!kind || !IMAGE_KINDS.has(kind.ext)) throw new Error("Pictures must be JPG or PNG.");
+  return `/${await saveUpload(`${MEDIA}/${folder}`, bytes, kind)}`;
+}
+
+/** A public picture by its /media/... path, or null. Only files under media/ can be read this way. */
+export async function readMedia(parts: string[]): Promise<{ bytes: Buffer; type: string } | null> {
+  if (parts.some((p) => !/^[A-Za-z0-9_.-]+$/.test(p) || p.startsWith("."))) return null;
+  const relative = [MEDIA, ...parts].join("/");
+  const bytes = await readUpload(relative);
+  return bytes ? { bytes, type: contentTypeOf(relative) } : null;
+}

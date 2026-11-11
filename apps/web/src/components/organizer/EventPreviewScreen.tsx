@@ -5,29 +5,12 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Info, Monitor, Pencil, Send, Smartphone } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
-import { capacityOf, eventStatusLabel, seatMapSectionStats, unassignedSeats, type EventDraft } from "@/lib/organizer";
-import { isEmptyHtml } from "@/lib/richText";
+import { draftProblems, editableBeforeReview, eventStatusLabel, eventStatusTone } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
 
 type Device = "desktop" | "phone";
 
-const tone = { on_sale: "success", draft: "neutral", in_review: "warning" } as const;
-
-/** What still blocks a draft from being sent for review. */
-function problemsFor(d: EventDraft): string[] {
-  const out: string[] = [];
-  if (!d.name.trim()) out.push("Add an event name.");
-  if (isEmptyHtml(d.description)) out.push("Add a description.");
-  if (!d.date) out.push("Choose a date.");
-  if (!d.venue.trim() || !d.address.trim()) out.push("Add the venue name and address.");
-  const seats = d.sellMode === "seats";
-  const capacity = seats
-    ? d.seatMap.sections.reduce((n, s) => n + seatMapSectionStats(d.seatMap, s).free, 0)
-    : capacityOf(d.ticketTypes).tickets;
-  if (capacity === 0) out.push(seats ? "Add at least one section with seats." : "Add at least one ticket type.");
-  if (seats && unassignedSeats(d.seatMap) > 0) out.push("Assign every seat on the seating plan to a section.");
-  return out;
-}
+const tone = eventStatusTone;
 
 /**
  * Full-screen preview of an event advertisement: just the buyer-facing event page, with no site header or
@@ -35,10 +18,12 @@ function problemsFor(d: EventDraft): string[] {
  */
 export function EventPreviewScreen({ id }: { id: string }) {
   const router = useRouter();
-  const { events, updateEvent } = useOrganizer();
+  const { events, saveEvent } = useOrganizer();
   const event = events.find((e) => e.id === id);
   const [device, setDevice] = useState<Device>("desktop");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>();
 
   // The preview takes over the whole window, so the page behind it must not scroll.
   useEffect(() => {
@@ -61,15 +46,21 @@ export function EventPreviewScreen({ id }: { id: string }) {
     );
   }
 
-  const isDraft = event.status === "draft";
-  const problems = event.draft ? problemsFor(event.draft) : [];
+  const isDraft = editableBeforeReview.includes(event.status);
+  // The same list the server checks when the event is submitted.
+  const problems = event.draft ? draftProblems(event.draft) : [];
   const canSubmit = isDraft && !!event.draft && problems.length === 0;
   const editHref = `/organizer/events/${id}/edit`;
 
-  function submit() {
-    // TODO: send to the API; SL Events reviews new events within one day before they go live.
-    updateEvent(id, { status: "in_review" });
-    setSent(true);
+  async function submit() {
+    if (!event?.draft) return;
+    // Sent to SL Events, which reviews new events within one day before they go live.
+    setSending(true);
+    setSendError(undefined);
+    const result = await saveEvent(id, event.draft, true);
+    setSending(false);
+    if (result.ok) setSent(true);
+    else setSendError([result.error, ...(result.problems ?? [])].join(" "));
   }
 
   const frame = (
@@ -121,13 +112,18 @@ export function EventPreviewScreen({ id }: { id: string }) {
               <Pencil size={14} aria-hidden /> Edit details
             </LinkButton>
             {isDraft && (
-              <Button size="sm" onClick={submit} disabled={!canSubmit || sent}>
-                <Send size={14} aria-hidden /> {sent ? "Sent for review" : "Submit for review"}
+              <Button size="sm" onClick={() => void submit()} disabled={!canSubmit || sent || sending}>
+                <Send size={14} aria-hidden /> {sent ? "Sent for review" : sending ? "Sending…" : "Submit for review"}
               </Button>
             )}
           </div>
         </div>
 
+        {sendError && (
+          <p role="alert" className="border-t border-danger/30 bg-danger/10 px-4 py-2.5 text-xs text-text sm:px-6">
+            {sendError}
+          </p>
+        )}
         {sent ? (
           <p role="status" className="border-t border-success/30 bg-success/10 px-4 py-2.5 text-xs text-text sm:px-6">
             Sent for review. SL Events checks new events within one day, then your event goes live.{" "}

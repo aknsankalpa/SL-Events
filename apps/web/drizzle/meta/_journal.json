@@ -15,6 +15,13 @@
       "when": 1794366719521,
       "tag": "0001_kind_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1794368984820,
+      "tag": "0002_narrow_hitman",
+      "breakpoints": true
     }
   ]
 }
