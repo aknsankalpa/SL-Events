@@ -206,8 +206,14 @@ type PlannedSeat = { seatId: number; label: string };
 
 /** Places a booking for the signed-in customer. Unpaid bookings are held for the payment window. */
 export async function createBooking(user: User, req: BookingRequest): Promise<Outcome<Booking>> {
-  const [event] = await db.select().from(s.events).where(eq(s.events.slug, req.eventSlug));
-  if (!event || !["on_sale", "paused", "cancelled", "ended"].includes(event.status)) return fail(404, "We couldn't find that event.");
+  const [found] = await db
+    .select({ event: s.events, organizerStatus: s.organizers.status })
+    .from(s.events)
+    .innerJoin(s.organizers, eq(s.organizers.id, s.events.organizerId))
+    .where(eq(s.events.slug, req.eventSlug));
+  const event = found?.event;
+  // Events of a suspended organizer are hidden and can't be booked.
+  if (!event || found.organizerStatus !== "active" || !["on_sale", "paused", "cancelled", "ended"].includes(event.status)) return fail(404, "We couldn't find that event.");
   if (event.status === "paused") return fail(409, "Ticket sales for this event are paused at the moment.");
   if (event.status !== "on_sale") return fail(409, "This event is no longer on sale.");
   if (event.startsAt && event.startsAt.getTime() <= Date.now()) return fail(409, "This event has already started.");
@@ -435,7 +441,10 @@ export async function canManageEvent(user: User, eventId: number | null): Promis
     .select({ role: s.organizerMembers.role })
     .from(s.events)
     .innerJoin(s.organizerMembers, eq(s.organizerMembers.organizerId, s.events.organizerId))
-    .where(and(eq(s.events.id, eventId), eq(s.organizerMembers.userId, user.id), inArray(s.organizerMembers.role, ["owner", "manager"])));
+    .innerJoin(s.organizers, eq(s.organizers.id, s.events.organizerId))
+    .where(
+      and(eq(s.events.id, eventId), eq(s.organizerMembers.userId, user.id), inArray(s.organizerMembers.role, ["owner", "manager"]), eq(s.organizers.status, "active")),
+    );
   return !!row;
 }
 

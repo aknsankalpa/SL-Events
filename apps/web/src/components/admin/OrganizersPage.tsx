@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { Check, FileText, Lock, Search, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
-import { organizerTabCounts, seedApproved, seedRejected, seedSuspended, type AppStatus } from "@/lib/admin";
-import { AdminHeader, Avatar, Dialog, Panel, Tabs, Toast } from "./ui";
+import type { AppStatus } from "@/lib/admin";
+import { AdminHeader, Avatar, Panel, Tabs, Toast } from "./ui";
 import { statusLabel, useApplications } from "./useAdmin";
 
 type Tab = "applications" | "approved" | "suspended" | "rejected";
@@ -25,15 +25,14 @@ const tabStatus: Record<Tab, AppStatus[]> = {
 };
 
 export function OrganizersPage() {
-  const { applications, decide } = useApplications();
+  const { applications, decide, loaded, error: loadError } = useApplications();
   const [tab, setTab] = useState<Tab>("applications");
-  const [selectedId, setSelectedId] = useState<string>("busan-lions");
+  const [selectedId, setSelectedId] = useState<string>("");
   const [choice, setChoice] = useState<Choice>("approved");
-  const [reason, setReason] = useState("ID, phone and bank checked. Past event photo looks fine.");
-  const [notify, setNotify] = useState(true);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
   const [reasonError, setReasonError] = useState<string>();
   const [checks, setChecks] = useState<Record<string, boolean[]>>({});
-  const [viewing, setViewing] = useState<string | null>(null);
   const [toast, setToast] = useState<string>();
   const [query, setQuery] = useState("");
 
@@ -43,12 +42,7 @@ export function OrganizersPage() {
   }, [applications, tab, query]);
   const selected = list.find((a) => a.id === selectedId) ?? list[0];
 
-  const count = (t: Tab) => {
-    const live = applications.filter((a) => tabStatus[t].includes(a.status)).length;
-    if (t === "applications") return live;
-    const seeded = { approved: seedApproved, suspended: seedSuspended, rejected: seedRejected }[t].length;
-    return organizerTabCounts[t] - seeded + live;
-  };
+  const count = (t: Tab) => applications.filter((a) => tabStatus[t].includes(a.status)).length;
 
   const ticks = selected ? (checks[selected.id] ?? selected.checks.map((_, i) => i < selected.checks.length - 1)) : [];
   const open = selected?.status === "new" || selected?.status === "info_asked";
@@ -59,18 +53,21 @@ export function OrganizersPage() {
     setTimeout(() => setToast(undefined), 3200);
   }
 
-  function submit() {
-    if (!selected) return;
+  async function submit() {
+    if (!selected || busy) return;
     if (choice !== "approved" && !reason.trim()) {
       setReasonError(choice === "rejected" ? "Write the reason so it is saved with the decision." : "Say what you need from them.");
       return;
     }
     setReasonError(undefined);
-    // TODO: the API saves the decision with the admin's name and time, and sends the email when asked.
-    decide(selected, choice, reason.trim(), notify);
+    // The server saves the decision with the admin's name and time; the applicant sees it on their status page.
+    setBusy(true);
+    const result = await decide(selected, choice, reason.trim());
+    setBusy(false);
+    if (!result.ok) return setReasonError(result.error);
     say(
       choice === "approved"
-        ? `${selected.name} is approved${notify ? " and has been emailed" : ""}.`
+        ? `${selected.name} is approved.${result.ok && result.accountCreated ? ` An account was made for ${selected.email}; they set a password with "Forgot password".` : ""}`
         : choice === "info_asked"
           ? `Asked ${selected.contact} for more information.`
           : `${selected.name} was rejected.`,
@@ -79,10 +76,14 @@ export function OrganizersPage() {
     setReason("");
   }
 
-  function change(status: AppStatus, label: string) {
-    if (!selected) return;
-    decide(selected, status, reason.trim(), false);
+  async function change(status: AppStatus, label: string) {
+    if (!selected || busy) return;
+    setBusy(true);
+    const result = await decide(selected, status, reason.trim());
+    setBusy(false);
+    if (!result.ok) return setReasonError(result.error);
     say(label);
+    setReason("");
     setSelectedId("");
   }
 
@@ -118,8 +119,8 @@ export function OrganizersPage() {
       {list.length === 0 || !selected ? (
         <Panel className="mt-6 p-10 text-center">
           <Check size={26} aria-hidden className="mx-auto text-success" />
-          <p className="mt-3 text-base font-bold text-text">{tab === "applications" ? "All caught up" : "Nobody here"}</p>
-          <p className="mt-1 text-sm text-muted">{tab === "applications" ? "No organizer applications are waiting." : "No organizers match."}</p>
+          <p className="mt-3 text-base font-bold text-text">{!loaded ? "Loading…" : loadError ? "Couldn't load organizers" : tab === "applications" ? "All caught up" : "Nobody here"}</p>
+          <p className="mt-1 text-sm text-muted">{loadError ?? (tab === "applications" ? "No organizer applications are waiting." : "No organizers match.")}</p>
         </Panel>
       ) : (
         <div className="mt-6 grid grid-cols-1 items-start gap-5 xl:grid-cols-[17rem_minmax(0,1fr)_18.5rem]">
@@ -202,9 +203,13 @@ export function OrganizersPage() {
                         <span className="block truncate text-[13px] font-bold text-text">{d.title}</span>
                         <span className="mt-1 block truncate text-[11px] text-dim">{d.detail}</span>
                       </span>
-                      <button type="button" onClick={() => setViewing(d.title)} className="shrink-0 text-xs font-bold text-amber hover:text-gold">
-                        View
-                      </button>
+                      {"url" in d && d.url ? (
+                        <a href={d.url as string} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-bold text-amber hover:text-gold">
+                          View
+                        </a>
+                      ) : (
+                        <span className="shrink-0 text-[11px] text-dim">No file</span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -268,21 +273,13 @@ export function OrganizersPage() {
                 />
                 {reasonError && <p className="mt-1.5 text-xs text-danger">{reasonError}</p>}
 
-                <label className="mt-3 flex cursor-pointer items-center gap-3 text-[13px] text-text">
-                  <input
-                    type="checkbox"
-                    checked={notify}
-                    onChange={(e) => setNotify(e.target.checked)}
-                    className="checkbox-box size-[18px] shrink-0 cursor-pointer appearance-none rounded border border-line bg-surface-2 checked:border-amber checked:bg-amber focus-visible:focus-ring"
-                  />
-                  Email the applicant
-                </label>
+                <p className="mt-3 text-[11px] leading-relaxed text-dim">The applicant sees the decision and your message on their status page. Emails aren&apos;t sent yet.</p>
                 {choice === "approved" && missing > 0 && (
                   <p className="mt-3 text-[11px] text-amber">
                     {missing} check{missing === 1 ? " isn't" : "s aren't"} ticked yet.
                   </p>
                 )}
-                <Button size="lg" className="mt-4 w-full" onClick={submit}>
+                <Button size="lg" className="mt-4 w-full" disabled={busy} onClick={() => void submit()}>
                   <Check size={16} aria-hidden /> {choices.find((c) => c.id === choice)!.button}
                 </Button>
                 <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-dim">
@@ -301,7 +298,8 @@ export function OrganizersPage() {
                 <Button
                   variant="outline"
                   className="mt-4 w-full border-danger/60 text-danger hover:bg-danger/10"
-                  onClick={() => (reason.trim() ? change("suspended", `${selected.name} is suspended.`) : setReasonError("Write the reason first."))}
+                  disabled={busy}
+                  onClick={() => (reason.trim() ? void change("suspended", `${selected.name} is suspended.`) : setReasonError("Write the reason first."))}
                 >
                   <ShieldOff size={16} aria-hidden /> Suspend organizer
                 </Button>
@@ -314,7 +312,7 @@ export function OrganizersPage() {
                     ? "Their events are hidden and new sales are stopped. You can reinstate them."
                     : "They can apply again after 30 days. You can also reopen the application now."}
                 </p>
-                <Button className="mt-4 w-full" onClick={() => (selected.status === "suspended" ? change("approved", `${selected.name} is reinstated.`) : change("new", `${selected.name} was reopened.`))}>
+                <Button className="mt-4 w-full" disabled={busy} onClick={() => void (selected.status === "suspended" ? change("approved", `${selected.name} is reinstated.`) : change("new", `${selected.name} was reopened.`))}>
                   {selected.status === "suspended" ? "Reinstate organizer" : "Reopen application"}
                 </Button>
               </>
@@ -323,16 +321,6 @@ export function OrganizersPage() {
         </div>
       )}
 
-      <Dialog open={viewing !== null} onClose={() => setViewing(null)} title={viewing ?? "Document"}>
-        <p className="text-sm leading-relaxed text-muted">
-          Documents open from private storage for staff only. This preview doesn&apos;t include real files, so there is nothing to show yet.
-        </p>
-        <div className="mt-6 flex justify-end">
-          <Button variant="ghost" onClick={() => setViewing(null)}>
-            Close
-          </Button>
-        </div>
-      </Dialog>
       <Toast message={toast} />
     </>
   );

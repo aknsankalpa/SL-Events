@@ -34,7 +34,11 @@ export const statusMeta: Record<ApplicationStatus, { label: string; tone: "neutr
   },
   in_review: { label: "In review", tone: "warning", summary: "A member of the team is reading your application now." },
   more_info: { label: "More information needed", tone: "warning", summary: "We need a little more from you before we can decide." },
-  approved: { label: "Approved", tone: "success", summary: "You're approved. Log in with this email to open the organizer area." },
+  approved: {
+    label: "Approved",
+    tone: "success",
+    summary: "You're approved. Log in with this email to open the organizer area. New to SL Events? Use \"Forgot password\" on the log-in page to set a password for this email first.",
+  },
   declined: { label: "Not approved", tone: "danger", summary: "We can't approve this application right now." },
 };
 

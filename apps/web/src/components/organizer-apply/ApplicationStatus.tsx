@@ -2,37 +2,46 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, CircleAlert, FileText, Search, XCircle } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/StatusBadge";
-import { applicationStore, statusMeta, type Application, type ApplicationStatus as Status } from "@/lib/organizerApplications";
+import { statusMeta, type Application, type ApplicationStatus as Status } from "@/lib/organizerApplications";
 
 const steps = ["Received", "In review", "Decision"] as const;
 /** How far along each status is on the three-step line. */
 const stepOf: Record<Status, number> = { received: 0, in_review: 1, more_info: 1, approved: 2, declined: 2 };
 
 const dateOf = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const noopSubscribe = () => () => undefined;
 
 export function ApplicationStatus() {
   const params = useSearchParams();
   const sent = params.get("sent") === "1";
-  const apps = useSyncExternalStore(applicationStore.subscribe, applicationStore.getSnapshot, applicationStore.getServerSnapshot);
-  const ready = useSyncExternalStore(
-    noopSubscribe,
-    () => true,
-    () => false,
-  );
   const first = params.get("ref") && params.get("email") ? { ref: params.get("ref")!, email: params.get("email")! } : null;
   const [lookup, setLookup] = useState<{ ref: string; email: string } | null>(first);
   const [errors, setErrors] = useState<{ ref?: string; email?: string }>({});
 
-  const result = lookup
-    ? apps.find((a) => a.ref === lookup.ref.trim().toUpperCase() && a.email === lookup.email.trim().toLowerCase())
-    : undefined;
+  // The server answers only when the reference and the email belong together.
+  const key = lookup ? `${lookup.ref.trim().toUpperCase()}|${lookup.email.trim().toLowerCase()}` : "";
+  const [answer, setAnswer] = useState<{ key: string; app?: Application }>();
+  useEffect(() => {
+    if (!lookup) return;
+    let live = true;
+    const q = new URLSearchParams({ ref: lookup.ref.trim(), email: lookup.email.trim() });
+    fetch(`/api/organizer-applications/status?${q}`, { cache: "no-store" })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { application?: Application };
+        if (live) setAnswer({ key, app: res.ok ? data.application : undefined });
+      })
+      .catch(() => live && setAnswer({ key }));
+    return () => {
+      live = false;
+    };
+  }, [lookup, key]);
+  const ready = answer?.key === key;
+  const result = ready ? answer?.app : undefined;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -7,7 +7,7 @@ import { FileText, Mail, Paperclip, Phone, Building2, User, Link2, X } from "luc
 import { useSession } from "@/components/auth/useSession";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, SelectField } from "@/components/ui/Field";
-import { eventKinds, openApplicationFor, submitApplication } from "@/lib/organizerApplications";
+import { eventKinds, type Application } from "@/lib/organizerApplications";
 
 const MAX_FILES = 3;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -24,7 +24,9 @@ export function ApplicationForm() {
   const fileId = useId();
   const [errors, setErrors] = useState<Errors>({});
   const [files, setFiles] = useState<File[]>([]);
-  const [existing, setExisting] = useState<{ ref: string; email: string }>();
+  const [existing, setExisting] = useState<{ ref?: string; email: string }>();
+  const [sending, setSending] = useState(false);
+  const [formError, setFormError] = useState<string>();
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -39,7 +41,7 @@ export function ApplicationForm() {
     setFiles(next);
   }
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const get = (k: string) => String(data.get(k) ?? "").trim();
@@ -53,28 +55,32 @@ export function ApplicationForm() {
     setErrors((cur) => ({ ...found, documents: cur.documents }));
     if (Object.keys(found).length) return;
 
-    const open = openApplicationFor(get("email"));
-    if (open) {
-      setExisting({ ref: open.ref, email: open.email });
-      return;
+    // The application and its files go to the server, which checks them again and stores the files privately.
+    const body = new FormData();
+    for (const k of ["name", "email", "contact", "organization", "kind", "about", "link"]) body.set(k, get(k));
+    for (const f of files) body.append("documents", f);
+    setSending(true);
+    setFormError(undefined);
+    setExisting(undefined);
+    try {
+      const res = await fetch("/api/organizer-applications", { method: "POST", body, credentials: "same-origin" });
+      const data = (await res.json().catch(() => ({}))) as { application?: Application; error?: string; errors?: Errors; existingRef?: string };
+      if (res.ok && data.application) {
+        router.push(`/become-an-organizer/status?ref=${data.application.ref}&email=${encodeURIComponent(data.application.email)}&sent=1`);
+        return;
+      }
+      setSending(false);
+      if (res.status === 409) return setExisting({ ref: data.existingRef, email: get("email") });
+      if (data.errors) setErrors(data.errors);
+      setFormError(data.error ?? "Couldn't send the application. Try again.");
+    } catch {
+      setSending(false);
+      setFormError("We couldn't reach SL Events. Check your connection and try again.");
     }
-
-    // TODO: POST the application and upload the attached files through the API.
-    const app = submitApplication({
-      name: get("name"),
-      email: get("email"),
-      contact: get("contact"),
-      organization: get("organization"),
-      kind: get("kind"),
-      about: get("about"),
-      link: get("link"),
-      documents: files.map((f) => ({ name: f.name, size: f.size })),
-    });
-    router.push(`/become-an-organizer/status?ref=${app.ref}&email=${encodeURIComponent(app.email)}&sent=1`);
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-8" aria-label="Organizer application">
+    <form onSubmit={(e) => void onSubmit(e)} noValidate className="space-y-8" aria-label="Organizer application">
       <fieldset className="space-y-5">
         <legend className="mb-1 text-lg font-bold text-text">About you</legend>
         <div className="grid gap-5 sm:grid-cols-2">
@@ -206,19 +212,25 @@ export function ApplicationForm() {
 
       {existing && (
         <p role="status" className="rounded-lg border border-amber/40 bg-amber/10 p-4 text-[13px] leading-relaxed text-text">
-          There&apos;s already an application for this email that hasn&apos;t been decided yet ({existing.ref}).{" "}
+          There&apos;s already an application for this email that hasn&apos;t been decided yet{existing.ref ? ` (${existing.ref})` : ""}.{" "}
           <Link
-            href={`/become-an-organizer/status?ref=${existing.ref}&email=${encodeURIComponent(existing.email)}`}
+            href={existing.ref ? `/become-an-organizer/status?ref=${existing.ref}&email=${encodeURIComponent(existing.email)}` : "/become-an-organizer/status"}
             className="font-bold text-amber hover:text-gold"
           >
             Check its status
           </Link>
-          .
+          {existing.ref ? "." : " with the reference you were given."}
         </p>
       )}
 
-      <Button type="submit" size="lg" className="w-full sm:w-auto">
-        Send application
+      {formError && (
+        <p role="alert" className="text-xs font-bold text-danger">
+          {formError}
+        </p>
+      )}
+
+      <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={sending}>
+        {sending ? "Sending…" : "Send application"}
       </Button>
     </form>
   );

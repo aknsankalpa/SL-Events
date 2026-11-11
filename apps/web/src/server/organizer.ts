@@ -44,7 +44,8 @@ export async function organizerOf(userId: number): Promise<Org | null> {
     .select({ id: s.organizers.id, slug: s.organizers.slug, name: s.organizers.name, role: s.organizerMembers.role })
     .from(s.organizerMembers)
     .innerJoin(s.organizers, eq(s.organizers.id, s.organizerMembers.organizerId))
-    .where(and(eq(s.organizerMembers.userId, userId), inArray(s.organizerMembers.role, ["owner", "manager"])))
+    // A suspended organizer's people are locked out until an admin reinstates it.
+    .where(and(eq(s.organizerMembers.userId, userId), inArray(s.organizerMembers.role, ["owner", "manager"]), eq(s.organizers.status, "active")))
     .orderBy(asc(s.organizers.id))
     .limit(1);
   return row ? { ...row, role: row.role as Org["role"] } : null;

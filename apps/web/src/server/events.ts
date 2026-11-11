@@ -113,7 +113,8 @@ async function loadEvents(where: SQL | undefined, withCharts: boolean): Promise<
     })
     .from(s.events)
     .innerJoin(s.organizers, eq(s.organizers.id, s.events.organizerId))
-    .where(where)
+    // A suspended organizer's events are hidden from customers until an admin reinstates it.
+    .where(and(where, eq(s.organizers.status, "active")))
     .orderBy(asc(s.events.startsAt));
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
