@@ -20,8 +20,11 @@ function createPool() {
     connectionLimit: Number(process.env.DATABASE_POOL_SIZE ?? 5),
     // Store and read every date in UTC; the website shows them in Korea time.
     timezone: "Z",
-    // MariaDB on Hostinger closes idle connections; keep the pool's connections alive between requests.
+    // MariaDB on Hostinger closes a connection after 20 seconds without a query (wait_timeout = 20). The pool closes
+    // its own idle connections sooner, so it never hands out one the server has already dropped.
     enableKeepAlive: true,
+    idleTimeout: 10_000,
+    maxIdle: 2,
   });
 }
 
@@ -31,4 +34,7 @@ export const pool = globalForDb.slEventsPool ?? createPool();
 if (process.env.NODE_ENV !== "production") globalForDb.slEventsPool = pool;
 
 export const db = drizzle(pool, { schema, mode: "default" });
+
+/** `db`, or a transaction from `db.transaction`: helpers that may run inside a transaction take either. */
+export type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 export { schema };

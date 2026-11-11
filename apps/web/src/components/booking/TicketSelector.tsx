@@ -6,11 +6,12 @@ import { ArrowRight, Check, Clock, Info, Minus, Plus } from "lucide-react";
 import { OrderSummary } from "@/components/booking/OrderSummary";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
+import { BOOKING_FEE } from "@/lib/bookings";
 import { ticketsLeft, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 
 export const MAX_TICKETS = 10;
-export const BOOKING_FEE = 0;
+export { BOOKING_FEE };
 
 export function TicketSelector({ event }: { event: EventItem }) {
   const router = useRouter();

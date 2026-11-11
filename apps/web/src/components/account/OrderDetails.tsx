@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Check, Circle, CreditCard, Download, LifeBuoy, QrCode, Upload, X } from "lucide-react";
 import { useSession } from "@/components/auth/useSession";
 import { Button, LinkButton } from "@/components/ui/Button";
@@ -10,7 +9,7 @@ import { Card, EventThumb, Row } from "@/components/ui/Card";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { canIssueTickets, customerCan, formatKst, paymentState, ticketCount, type Booking } from "@/lib/bookings";
-import { customerActions } from "@/lib/bookingStore";
+import { bookingActions } from "@/components/booking/useBookings";
 import type { EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 import { downloadReceipt, receiptAvailable, receiptNumber } from "@/lib/receipt";
@@ -37,9 +36,10 @@ function timeline(b: Booking): Step[] {
 
 /** One booking in full: what was bought, who it's for, how it was paid, where it stands and what can be done next. */
 export function OrderDetails({ booking: b, event }: { booking: Booking; event: EventItem }) {
-  const router = useRouter();
   const { user } = useSession();
   const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string>();
   const steps = timeline(b);
   const tickets = canIssueTickets(b);
 
@@ -190,16 +190,19 @@ export function OrderDetails({ booking: b, event }: { booking: Booking; event: E
                     <Button
                       variant="danger"
                       size="sm"
-                      // TODO: call the cancel-booking API.
-                      onClick={() => {
-                        customerActions.cancelBooking(b.id);
-                        setConfirming(false);
-                        router.refresh();
+                      disabled={cancelling}
+                      onClick={async () => {
+                        setCancelling(true);
+                        const result = await bookingActions.cancel(b.id);
+                        setCancelling(false);
+                        setCancelError(result.ok ? undefined : result.error);
+                        if (result.ok) setConfirming(false);
                       }}
                     >
-                      Cancel booking
+                      {cancelling ? "Cancelling…" : "Cancel booking"}
                     </Button>
                   </div>
+                  {cancelError && <p className="mt-2 text-xs text-danger">{cancelError}</p>}
                 </div>
               ) : (
                 <Button variant="ghost" className="w-full text-danger hover:text-danger" onClick={() => setConfirming(true)}>

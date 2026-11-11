@@ -5,7 +5,7 @@
 
 import { and, asc, eq, getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
-import { db, schema as s } from "@/db";
+import { db, schema as s, type Executor } from "@/db";
 import type { CategoryId, EventItem, TicketType } from "@/lib/data";
 import type { ChartSeat, ChartSection, SeatChart } from "@/lib/seating";
 
@@ -18,7 +18,7 @@ const LISTED = ["on_sale", "paused"] as const;
  * A booking still counts towards sales and seats unless it was cancelled, or it was never paid and its payment window
  * has closed. The same rule as `effectiveStatus` in lib/bookings.ts.
  */
-const activeBooking = sql`(${s.bookings.status} IN ('confirmed','under_review','attended')
+export const activeBooking = sql`(${s.bookings.status} IN ('confirmed','under_review','attended')
   OR (${s.bookings.status} IN ('awaiting_payment','proof_rejected') AND (${s.bookings.payBy} IS NULL OR ${s.bookings.payBy} > UTC_TIMESTAMP())))`;
 
 /* ---------- formatting, in Korea time ---------- */
@@ -49,6 +49,53 @@ function paragraphsOf(html: string): string[] {
         .trim(),
     )
     .filter(Boolean);
+}
+
+/* ---------- seat charts ---------- */
+
+type SectionRow = typeof s.seatSections.$inferSelect;
+type SeatRow = typeof s.seats.$inferSelect;
+
+/** The chart customers see, from its rows. Seats outside any section are left out unless they are blocked. */
+function chartFrom(c: typeof s.seatCharts.$inferSelect, sections: SectionRow[], seatRows: SeatRow[]): SeatChart {
+  const own = sections.filter((sec) => sec.eventId === c.eventId);
+  const sectionKey = new Map(own.map((sec) => [sec.id, sec.key] as const));
+  const chartSections: ChartSection[] = own.map((sec) => ({ id: sec.key, name: sec.name, color: sec.color, price: sec.price }));
+  const chartSeats: ChartSeat[] = seatRows
+    .filter((seat) => seat.eventId === c.eventId && (seat.sectionId || seat.blocked))
+    .map((seat) => ({
+      id: seat.key,
+      row: seat.row,
+      num: seat.num,
+      label: seat.label,
+      x: seat.x,
+      y: seat.y,
+      r: seat.r,
+      sectionId: seat.sectionId ? sectionKey.get(seat.sectionId) ?? "" : "",
+      accessible: seat.accessible || undefined,
+      blocked: seat.blocked || undefined,
+    }));
+  return { width: c.width, height: c.height, imageUrl: c.imageUrl ?? undefined, stage: c.stage ?? undefined, sections: chartSections, seats: chartSeats };
+}
+
+/** An event's seat chart straight from the database (not cached): what a booking is checked against. */
+export async function seatChartFor(eventId: number, exec: Executor = db): Promise<SeatChart | undefined> {
+  const [c] = await exec.select().from(s.seatCharts).where(eq(s.seatCharts.eventId, eventId));
+  if (!c) return undefined;
+  const sections = await exec.select().from(s.seatSections).where(eq(s.seatSections.eventId, eventId)).orderBy(asc(s.seatSections.sort));
+  const seatRows = await exec.select().from(s.seats).where(eq(s.seats.eventId, eventId));
+  return chartFrom(c, sections, seatRows);
+}
+
+/** Seat ids (the chart's keys) held right now by bookings that still count. Never cached: seat pickers poll it. */
+export async function takenSeatKeys(eventId: number, exec: Executor = db): Promise<string[]> {
+  const rows = await exec
+    .select({ key: s.seats.key })
+    .from(s.seatHolds)
+    .innerJoin(s.seats, eq(s.seats.id, s.seatHolds.seatId))
+    .innerJoin(s.bookings, eq(s.bookings.id, s.seatHolds.bookingId))
+    .where(and(eq(s.seatHolds.eventId, eventId), activeBooking));
+  return rows.map((r) => r.key);
 }
 
 /* ---------- building EventItem from rows ---------- */
@@ -110,25 +157,7 @@ async function loadEvents(where: SQL | undefined, withCharts: boolean): Promise<
   if (withCharts && seatedIds.length) {
     const chartRows = await db.select().from(s.seatCharts).where(inArray(s.seatCharts.eventId, seatedIds));
     const seatRows = await db.select().from(s.seats).where(inArray(s.seats.eventId, seatedIds));
-    const sectionKey = new Map(sections.map((sec) => [sec.id, sec.key] as const));
-    for (const c of chartRows) {
-      const chartSections: ChartSection[] = sections.filter((sec) => sec.eventId === c.eventId).map((sec) => ({ id: sec.key, name: sec.name, color: sec.color, price: sec.price }));
-      const chartSeats: ChartSeat[] = seatRows
-        .filter((seat) => seat.eventId === c.eventId && (seat.sectionId || seat.blocked))
-        .map((seat) => ({
-          id: seat.key,
-          row: seat.row,
-          num: seat.num,
-          label: seat.label,
-          x: seat.x,
-          y: seat.y,
-          r: seat.r,
-          sectionId: seat.sectionId ? sectionKey.get(seat.sectionId) ?? "" : "",
-          accessible: seat.accessible || undefined,
-          blocked: seat.blocked || undefined,
-        }));
-      charts.set(c.eventId, { width: c.width, height: c.height, imageUrl: c.imageUrl ?? undefined, stage: c.stage ?? undefined, sections: chartSections, seats: chartSeats });
-    }
+    for (const c of chartRows) charts.set(c.eventId, chartFrom(c, sections, seatRows));
   }
 
   return rows.map((r): EventItem => {

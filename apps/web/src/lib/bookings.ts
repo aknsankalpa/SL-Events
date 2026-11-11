@@ -21,6 +21,9 @@ export type PaymentState = "pending" | "confirmed" | "failed" | "expired" | "can
 /** Most tickets (or seats) one booking may hold. The server must enforce the same limit. */
 export const MAX_PER_BOOKING = 10;
 
+/** Booking fee added to every booking. The server charges exactly this; screens only show it. */
+export const BOOKING_FEE = 0;
+
 export type BookingLine = { ticketName: string; qty: number; unitPrice: number };
 
 /** A seat a booking holds. `id` is the chart's seat id; `label` ("C12") is what the customer reads. */
@@ -56,6 +59,8 @@ export type Booking = {
   verifiedAt?: string;
   verifiedBy?: string;
   cancelledAt?: string;
+  /** The QR tickets, as the server issued them. Only present when tickets may exist (see `canIssueTickets`). */
+  tickets?: IssuedTicket[];
 };
 
 export const statusMeta: Record<BookingStatus, { label: string; tone: "success" | "warning" | "neutral" | "danger" }> = {
@@ -379,6 +384,7 @@ function codeFor(id: string, index: number): string {
 /** The tickets for a booking. Empty unless the payment rules say tickets may exist. */
 export function ticketsFor(b: Booking): IssuedTicket[] {
   if (!canIssueTickets(b)) return [];
+  if (b.tickets) return b.tickets;
   const names = b.lines.flatMap((l) => Array.from({ length: l.qty }, () => l.ticketName));
   return names.map((ticketName, i) => ({
     code: knownCodes[b.id]?.[i] ?? codeFor(b.id, i),

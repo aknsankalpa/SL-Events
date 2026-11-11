@@ -11,8 +11,8 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { Checkbox, Field } from "@/components/ui/Field";
 import { useSession } from "@/components/auth/useSession";
 import { useOnline } from "@/components/layout/OfflineBanner";
-import { useTakenSeats } from "@/components/seats/useTakenSeats";
-import { customerActions } from "@/lib/bookingStore";
+import { refreshTakenSeats, useTakenSeats } from "@/components/seats/useTakenSeats";
+import { bookingActions } from "@/components/booking/useBookings";
 import { currentUser, paymentAccount, ticketsLeft, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 import { MAX_PER_BOOKING } from "@/lib/bookings";
@@ -75,6 +75,7 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [agreeData, setAgreeData] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   if (selection.length === 0) {
     return (
@@ -95,40 +96,26 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
   const missingName = attendeeSlots.some((_, i) => !names[i]?.trim());
   const canConfirm = agreeTerms && agreeData && !missingName;
 
-  function confirm() {
+  async function confirm() {
     setSubmitted(true);
-    if (!canConfirm || !user) return;
-    if (chart && seated?.ok) {
-      // TODO: POST the seats to the API, which holds them in one atomic step, then use the id it returns.
-      const result = customerActions.createSeatedBooking({
-        ownerEmail: user.email,
-        eventSlug: event.slug,
-        eventTitle: event.title,
-        eventDate: event.longDate.replace(/^w+, /, ""),
-        seatIds: seated.seats.map((s) => s.id),
-        fee: BOOKING_FEE,
-        attendees: attendeeSlots.map((_, i) => (names[i] ?? "").trim()),
-      });
-      if (!result.ok) {
-        setProblem(result.message);
-        return;
-      }
-      setFrozen(seated);
-      router.push(result.booking.status === "confirmed" ? `/bookings/${result.booking.id}` : `/bookings/${result.booking.id}/payment`);
+    setProblem(undefined);
+    if (!canConfirm || !user || busy) return;
+    setBusy(true);
+    // The server checks again what is left, sets the prices and holds the seats in one step. The booking starts unpaid
+    // (or confirmed when there is nothing to pay); it is marked paid only by staff.
+    const attendees = attendeeSlots.map((_, i) => (names[i] ?? "").trim());
+    const result =
+      chart && seated?.ok
+        ? await bookingActions.create({ eventSlug: event.slug, seatIds: seated.seats.map((s) => s.id), attendees })
+        : await bookingActions.create({ eventSlug: event.slug, tickets: Object.fromEntries(selection.map(({ type, qty }) => [type.id, qty])), attendees });
+    if (!result.ok) {
+      setBusy(false);
+      setProblem(result.error);
+      if (chart) void refreshTakenSeats(event.slug);
       return;
     }
-    // TODO: POST the booking to the API, which re-checks availability and limits, then use the id it returns.
-    // The booking starts unpaid (or confirmed when there is nothing to pay). It is marked paid only by staff.
-    const booking = customerActions.createBooking({
-      ownerEmail: user.email,
-      eventSlug: event.slug,
-      eventTitle: event.title,
-      eventDate: event.longDate.replace(/^\w+, /, ""),
-      lines: selection.map(({ type, qty }) => ({ ticketName: type.name, qty, unitPrice: type.price })),
-      fee: BOOKING_FEE,
-      attendees: names.map((n) => n.trim()),
-    });
-    router.push(booking.status === "confirmed" ? `/bookings/${booking.id}` : `/bookings/${booking.id}/payment`);
+    if (chart && seated?.ok) setFrozen(seated);
+    router.push(result.booking.status === "confirmed" ? `/bookings/${result.booking.id}` : `/bookings/${result.booking.id}/payment`);
   }
 
   return (
@@ -317,13 +304,16 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
               <p className="mt-1 text-[11px] text-dim">{total === 0 ? "Your tickets are issued straight away." : "You'll get the account details next."}</p>
             </div>
           </div>
-          <Button size="lg" className="w-full" onClick={confirm} disabled={!online}>
-            Confirm booking
+          <Button size="lg" className="w-full" onClick={() => void confirm()} disabled={!online || busy}>
+            {busy ? "Placing your booking…" : "Confirm booking"}
           </Button>
           {!online && <p role="alert" className="mt-3 text-center text-[11px] text-amber">You&apos;re offline. Reconnect to book.</p>}
           {problem && (
             <p role="alert" className="mt-3 text-center text-xs font-bold text-danger">
-              {problem} <Link href={`/events/${event.slug}/book`} className="underline">Choose seats</Link>
+              {problem}{" "}
+              <Link href={`/events/${event.slug}/book`} className="underline">
+                {chart ? "Choose seats" : "Choose tickets"}
+              </Link>
             </p>
           )}
           <p className="mt-3 text-center text-[11px] text-dim">{total === 0 ? "Free booking." : "Pay within 24 hours or the seats are released."}</p>

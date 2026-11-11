@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, EventThumb } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import type { Booking } from "@/lib/bookings";
-import { customerActions } from "@/lib/bookingStore";
+import { bookingActions } from "@/components/booking/useBookings";
 import { useSession } from "@/components/auth/useSession";
 import { useOnline } from "@/components/layout/OfflineBanner";
 import { currentUser, type EventItem } from "@/lib/data";
@@ -16,7 +16,7 @@ import { formatKrw } from "@/lib/format";
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png", "application/pdf"];
 
-type Upload = { file: File; previewUrl?: string; progress: number };
+type Upload = { file: File; previewUrl?: string };
 
 export function ProofUploadForm({ booking, event }: { booking: Booking; event: EventItem }) {
   const router = useRouter();
@@ -29,13 +29,11 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
   const { user } = useSession();
   const online = useOnline();
   const [sender, setSender] = useState((user?.name ?? currentUser.fullName).toUpperCase());
-
-  // Simulated progress: the real upload to storage is wired up once the API exists.
-  useEffect(() => {
-    if (!upload || upload.progress >= 100) return;
-    const id = setTimeout(() => setUpload((u) => (u ? { ...u, progress: Math.min(100, u.progress + 20) } : u)), 120);
-    return () => clearTimeout(id);
-  }, [upload]);
+  /** Upload progress while sending (0–100); undefined when not sending. */
+  const [progress, setProgress] = useState<number>();
+  const [serverError, setServerError] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const sending = progress !== undefined;
 
   const previewUrl = upload?.previewUrl;
   useEffect(() => {
@@ -49,23 +47,30 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
     if (!ACCEPTED.includes(file.type)) return setFileError("Use a JPG, PNG or PDF file.");
     if (file.size > MAX_BYTES) return setFileError("That file is larger than 10 MB.");
     setFileError(undefined);
-    setUpload({ file, progress: 0, previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined });
+    setFieldErrors((e) => ({ ...e, file: "" }));
+    setUpload({ file, previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined });
   }
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitted(true);
-    if (!upload || upload.progress < 100 || !sender.trim()) return;
-    const bank = String(new FormData(e.currentTarget).get("bank") ?? "").trim();
-    // TODO: upload the receipt to storage and send the details to the API. The booking only becomes "under review":
-    // it is marked paid when staff have checked the transfer, never from here.
-    const ok = customerActions.submitProof(booking.id, {
-      fileName: upload.file.name,
-      sizeLabel: `${(upload.file.size / 1024 / 1024).toFixed(1)} MB`,
-      sender: sender.trim(),
-      bank,
-    });
-    router.push(ok ? `/bookings/${booking.id}?submitted=1` : `/bookings/${booking.id}`);
+    if (!upload || !sender.trim() || sending) return;
+    // The screenshot and details go to the server, which stores the file privately. The booking only becomes
+    // "under review": it is marked paid when staff have checked the transfer, never from here.
+    const form = new FormData(e.currentTarget);
+    form.set("file", upload.file);
+    form.set("sender", sender.trim());
+    setServerError(undefined);
+    setFieldErrors({});
+    setProgress(0);
+    const result = await bookingActions.submitProof(booking.id, form, setProgress);
+    if (result.ok) {
+      router.push(`/bookings/${booking.id}?submitted=1`);
+      return;
+    }
+    setProgress(undefined);
+    setServerError(result.error);
+    setFieldErrors(result.errors ?? {});
   }
 
   const size = upload ? `${(upload.file.size / 1024 / 1024).toFixed(1)} MB` : "";
@@ -106,7 +111,7 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
               onChange={(e) => accept(e.target.files?.[0])}
             />
           </label>
-          {fileError && <p className="mt-2 text-xs text-danger">{fileError}</p>}
+          {(fileError || fieldErrors.file) && <p className="mt-2 text-xs text-danger">{fileError || fieldErrors.file}</p>}
           {submitted && !upload && !fileError && <p className="mt-2 text-xs text-danger">Add a screenshot of your transfer.</p>}
 
           {upload && (
@@ -122,15 +127,18 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-bold text-text">{upload.file.name}</p>
                 <p className="mt-0.5 text-[11px] text-dim">
-                  {size} · {upload.progress < 100 ? "Uploading…" : "Uploaded"}
+                  {size} · {sending ? ((progress ?? 0) < 100 ? `Uploading… ${progress ?? 0}%` : "Checking…") : "Ready to send"}
                 </p>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={upload.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Upload progress">
-                  <div className="h-full rounded-full bg-gradient-to-r from-gold to-amber transition-[width]" style={{ width: `${upload.progress}%` }} />
-                </div>
+                {sending && (
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Upload progress">
+                    <div className="h-full rounded-full bg-gradient-to-r from-gold to-amber transition-[width]" style={{ width: `${progress}%` }} />
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 aria-label="Remove file"
+                disabled={sending}
                 onClick={() => {
                   setUpload(undefined);
                   if (inputRef.current) inputRef.current.value = "";
@@ -154,7 +162,7 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
               value={sender}
               onChange={(e) => setSender(e.target.value)}
               hint="Exactly as it appears in your banking app."
-              error={submitted && !sender.trim() ? "Enter the name on the sending account." : undefined}
+              error={submitted && !sender.trim() ? "Enter the name on the sending account." : fieldErrors.sender || undefined}
             />
             <Field label="Bank or app you sent from (optional)" name="bank" placeholder="For example, the name of your bank" />
           </div>
@@ -202,9 +210,14 @@ export function ProofUploadForm({ booking, event }: { booking: Booking; event: E
             <span className="text-[13px] text-muted">Amount due</span>
             <span className="text-2xl font-bold text-text">{formatKrw(booking.total)}</span>
           </div>
-          <Button type="submit" size="lg" className="mt-5 w-full" disabled={(!!upload && upload.progress < 100) || !online}>
-            Submit proof
+          <Button type="submit" size="lg" className="mt-5 w-full" disabled={sending || !online}>
+            {sending ? "Sending…" : "Submit proof"}
           </Button>
+          {serverError && (
+            <p role="alert" className="mt-3 text-center text-xs font-bold text-danger">
+              {serverError}
+            </p>
+          )}
           {!online && <p role="alert" className="mt-3 text-center text-[11px] text-amber">You&apos;re offline. Reconnect to send your proof.</p>}
           <p className="mt-3 text-center text-[11px] text-dim">We usually check payments within 2–6 hours.</p>
         </Card>

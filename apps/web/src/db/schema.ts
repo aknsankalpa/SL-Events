@@ -418,6 +418,8 @@ export const paymentProofs = mysqlTable(
     sizeBytes: int("size_bytes", { unsigned: true }).notNull(),
     sender: varchar("sender", { length: 120 }),
     bank: varchar("bank", { length: 80 }),
+    /** What the customer typed with the screenshot, as they typed it: amount sent, transfer date and time, a note. */
+    details: json("details").$type<{ amount?: string; date?: string; time?: string; note?: string }>(),
     uploadedAt: createdAt(),
   },
   (t) => [index("payment_proofs_booking_idx").on(t.bookingId)],

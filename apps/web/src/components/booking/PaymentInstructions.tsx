@@ -8,7 +8,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/StatusBadge";
 import type { Booking } from "@/lib/bookings";
-import { customerActions } from "@/lib/bookingStore";
+import { bookingActions } from "@/components/booking/useBookings";
 import { paymentAccount, type EventItem } from "@/lib/data";
 import { formatKrw } from "@/lib/format";
 
@@ -59,6 +59,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 export function PaymentInstructions({ booking, event }: { booking: Booking; event: EventItem }) {
   const router = useRouter();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string>();
   const left = useCountdown(booking.payByIso);
   const amount = formatKrw(booking.total);
 
@@ -148,15 +150,23 @@ export function PaymentInstructions({ booking, event }: { booking: Booking; even
                 <Button
                   variant="danger"
                   size="sm"
-                  // TODO: call the cancel-booking API, which releases the held tickets.
-                  onClick={() => {
-                    customerActions.cancelBooking(booking.id);
-                    router.push(`/bookings/${booking.id}`);
+                  disabled={cancelling}
+                  onClick={async () => {
+                    // The server cancels it and releases the held tickets and seats.
+                    setCancelling(true);
+                    const result = await bookingActions.cancel(booking.id);
+                    if (result.ok) {
+                      router.push(`/bookings/${booking.id}`);
+                      return;
+                    }
+                    setCancelling(false);
+                    setCancelError(result.error);
                   }}
                 >
-                  Yes, cancel booking
+                  {cancelling ? "Cancelling…" : "Yes, cancel booking"}
                 </Button>
               </div>
+              {cancelError && <p className="mt-2 text-xs text-danger">{cancelError}</p>}
             </div>
           ) : (
             <Button variant="ghost" className="mt-2 w-full" onClick={() => setConfirmCancel(true)}>

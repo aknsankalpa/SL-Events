@@ -6,6 +6,7 @@ import { Loader2, SearchX } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { eventForBooking, type Booking } from "@/lib/bookings";
 import type { EventItem } from "@/lib/data";
+import { useEvents } from "@/components/events/EventsCatalog";
 import { useBooking } from "./useBookings";
 
 /**
@@ -14,6 +15,7 @@ import { useBooking } from "./useBookings";
  */
 export function BookingLoader({ id, children }: { id: string; children: (booking: Booking, event: EventItem) => ReactNode }) {
   const { booking, ready, user } = useBooking(id);
+  const events = useEvents();
 
   if (!ready || !user) {
     return (
@@ -40,5 +42,7 @@ export function BookingLoader({ id, children }: { id: string; children: (booking
       </div>
     );
   }
-  return <>{children(booking, eventForBooking(booking))}</>;
+  // The event as it is listed now (from the database); past events that are no longer listed get a stand-in.
+  const event = (booking.eventSlug && events.find((e) => e.slug === booking.eventSlug)) || eventForBooking(booking);
+  return <>{children(booking, event)}</>;
 }
