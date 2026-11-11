@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { contactChannels, faqs, helpCategories, type FaqCategory } from "@core/content";
 import { submitSupportRequest } from "@core/supportRequests";
-import { paymentAccount } from "@core/data";
+import { usePaymentAccount } from "@/lib/siteConfig";
 import { useSession } from "@/lib/hooks";
 import { openUrl } from "@/lib/rules";
 import { Button } from "@/ui/Button";
@@ -37,6 +37,7 @@ function Faq({ q, a }: { q: string; a: string }) {
 }
 
 export default function Help() {
+  const paymentAccount = usePaymentAccount();
   const user = useSession();
   const [cat, setCat] = useState<FaqCategory>("booking");
   const [topic, setTopic] = useState("");

@@ -5,9 +5,7 @@ import { CameraView } from "expo-camera";
 import { useScanCamera } from "@/lib/camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import { useSession } from "@/lib/hooks";
-import { staffFor } from "@/lib/roles";
-import { demoCodes, staffEvent } from "@/staff/data";
+import { useStaffProfile, staffEvent } from "@/staff/data";
 import { useConnection } from "@/staff/hooks";
 import { checkTicket, scanRequests, selectGate, setOffline, useStaffState } from "@/staff/store";
 import { useSummary } from "@/staff/summary";
@@ -18,7 +16,6 @@ import { Text } from "@/ui/Text";
 import { colors, radius } from "@/theme";
 
 /** How long the phone shows "Checking ticket…". The real check is one round trip to the SL Events server. */
-const CHECK_MS = 700;
 const RETRY_SECONDS = 5;
 
 function Corner({ pos }: { pos: "tl" | "tr" | "bl" | "br" }) {
@@ -129,8 +126,7 @@ function OfflineView({ lastConnected, onRetry, phone, who }: { lastConnected: st
 }
 
 export default function Scan() {
-  const user = useSession();
-  const staff = staffFor(user?.email);
+  const staff = useStaffProfile();
   const { eventId, gate } = useStaffState();
   const event = staffEvent(eventId);
   const summary = useSummary(eventId);
@@ -138,6 +134,7 @@ export default function Scan() {
   const { available: cameraOk, permission, request: requestPermission } = useScanCamera();
   const [torch, setTorch] = useState(false);
   const [checking, setChecking] = useState<string>();
+  const [scanError, setScanError] = useState<string>();
   const [typeOpen, setTypeOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -163,11 +160,17 @@ export default function Scan() {
       busy.current = true;
       setTypeOpen(false);
       setChecking(code);
-      setTimeout(() => {
-        const result = checkTicket(event.id, gate, code, staff);
+      // The website answers for every ticket; nobody is let in without its answer.
+      void checkTicket(event.id, gate, code, staff).then(({ result, error }) => {
         setChecking(undefined);
+        if (!result) {
+          busy.current = false;
+          setScanError(error);
+          return;
+        }
+        setScanError(undefined);
         router.push({ pathname: "/staff/result", params: { event: event.id, id: result.id } });
-      }, CHECK_MS);
+      });
     },
     [event, gate, staff],
   );
@@ -260,6 +263,11 @@ export default function Scan() {
           </View>
 
           <View style={{ padding: 16, paddingBottom: 30, gap: 12 }}>
+            {scanError && (
+              <Text accessibilityRole="alert" color="#ff6b6b" bold>
+                {scanError}
+              </Text>
+            )}
             <View style={{ flexDirection: "row", gap: 12 }}>
               <StatTile label="Checked in">
                 <Text>
@@ -281,7 +289,7 @@ export default function Scan() {
                     </Text>
                   </View>
                   <Text variant="small" color={colors.muted}>
-                    0.4 s
+                    Checking…
                   </Text>
                 </StatTile>
               ) : (
@@ -321,21 +329,6 @@ export default function Scan() {
           <Text variant="heading">Type the ticket code</Text>
           <Field label="Code" value={typed} onChangeText={(v) => setTyped(v.toUpperCase())} autoCapitalize="characters" autoCorrect={false} placeholder="SLE-7K3F-92QD" onSubmitEditing={() => run(typed)} />
           <Button title="Check ticket" onPress={() => run(typed)} disabled={!typed.trim()} />
-          <Text variant="label" color={colors.muted}>
-            Demo codes
-          </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {demoCodes.map((d) => (
-              <Pressable key={d.code} accessibilityRole="button" accessibilityLabel={`${d.code}, ${d.label}`} onPress={() => run(d.code)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface2 }}>
-                <Text variant="caption" bold>
-                  {d.label}
-                </Text>
-                <Text variant="caption" color={colors.dim}>
-                  {d.code}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
       </Modal>
 

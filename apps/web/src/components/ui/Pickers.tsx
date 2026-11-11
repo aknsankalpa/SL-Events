@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { REFERENCE_DATE } from "@/lib/organizer";
+import { todayKst } from "@/lib/organizer";
 import { PopoverPanel, placePopover, type PopoverPlacement } from "./Popover";
 
 type ChangeEventLike = { target: { value: string; name?: string } };
@@ -111,7 +111,8 @@ export function DatePicker({
 }
 
 function CalendarPanel({ selected, canClear, onPick }: { selected: string; canClear: boolean; onPick: (v: string) => void }) {
-  const base = parseDate(selected) ?? parseDate(REFERENCE_DATE)!;
+  const todayIso = todayKst();
+  const base = parseDate(selected) ?? parseDate(todayIso)!;
   const [view, setView] = useState({ y: base.y, m: base.m });
   const grid = useRef<HTMLDivElement>(null);
 
@@ -131,7 +132,7 @@ function CalendarPanel({ selected, canClear, onPick }: { selected: string; canCl
 
   // Which day takes the single tab stop: the picked day, else today, else the 1st.
   const stopDay =
-    cells.find((d) => d && iso(d) === selected) ?? cells.find((d) => d && iso(d) === REFERENCE_DATE) ?? 1;
+    cells.find((d) => d && iso(d) === selected) ?? cells.find((d) => d && iso(d) === todayIso) ?? 1;
 
   useEffect(() => {
     grid.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
@@ -182,7 +183,7 @@ function CalendarPanel({ selected, canClear, onPick }: { selected: string; canCl
           if (day === null) return <span key={i} />;
           const date = iso(day);
           const isSelected = date === selected;
-          const today = date === REFERENCE_DATE;
+          const today = date === todayIso;
           return (
             <button
               key={i}
@@ -208,7 +209,7 @@ function CalendarPanel({ selected, canClear, onPick }: { selected: string; canCl
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs font-bold">
-        <button type="button" onClick={() => onPick(REFERENCE_DATE)} className="text-gold hover:brightness-110 focus-visible:focus-ring">
+        <button type="button" onClick={() => onPick(todayIso)} className="text-gold hover:brightness-110 focus-visible:focus-ring">
           Today
         </button>
         {canClear && selected && (

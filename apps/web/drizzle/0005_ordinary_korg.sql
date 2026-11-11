@@ -1,0 +1,1 @@
+ALTER TABLE `auth_codes` MODIFY COLUMN `purpose` enum('verify_email','reset_password','app_handoff') NOT NULL;

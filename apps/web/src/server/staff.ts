@@ -265,6 +265,10 @@ export type CheckInResult = {
   /** For "too_early" / "too_late": when check-in opens and when it closes. */
   opensAt?: string;
   cutoffAt?: string;
+  /** For "already_used": when, where and by whom it was first scanned. */
+  firstScan?: { time: string; gate: string; by: string };
+  /** For "admitted": how many tickets of the booking are now in. */
+  bookingProgress?: { checked: number; total: number };
 };
 
 /** Admins, owners/managers of the event's organizer, and door staff assigned to the event. */
@@ -322,11 +326,21 @@ export async function checkIn(user: User, eventId: number, rawCode: string, gate
     if (admitted) {
       // A booking with someone through the door reads as "attended" for the customer.
       await db.update(s.bookings).set({ status: "attended" }).where(and(eq(s.bookings.id, row.bookingId), eq(s.bookings.status, "confirmed")));
-      result = { outcome: "admitted", ...base };
+      const mates = await db.select({ scannedAt: s.tickets.scannedAt }).from(s.tickets).where(eq(s.tickets.bookingId, row.bookingId));
+      result = { outcome: "admitted", ...base, bookingProgress: { checked: mates.filter((m) => m.scannedAt).length, total: mates.length } };
     } else if (row.t.eventId !== eventId) result = { outcome: "wrong_event", ...base };
     else if (row.status === "cancelled" || row.status === "expired") result = { outcome: "cancelled", ...base };
     else if (row.status !== "confirmed" && row.status !== "attended") result = { outcome: "not_paid", ...base };
-    else result = { outcome: "already_used", ...base, scannedAt: row.t.scannedAt ? formatKst(row.t.scannedAt.toISOString()) : undefined };
+    else {
+      const [by] = row.t.scannedBy ? await db.select({ name: s.users.name }).from(s.users).where(eq(s.users.id, row.t.scannedBy)) : [];
+      const at = row.t.scannedAt ?? new Date();
+      result = {
+        outcome: "already_used",
+        ...base,
+        scannedAt: formatKst(at.toISOString()),
+        firstScan: { time: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Seoul" }).format(at), gate: row.t.gate ?? "—", by: by?.name.split(" ")[0] ?? "Staff" },
+      };
+    }
   }
   await db.insert(s.scanLog).values({
     eventId,

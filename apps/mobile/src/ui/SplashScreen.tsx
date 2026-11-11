@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Image, Platform, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "@/ui/Text";
@@ -16,8 +16,8 @@ const FADE_MS = 350;
  * shows its own launch screen, so the splash is drawn here to appear in every build, Expo Go included.
  */
 export function SplashScreen({ onDone }: { onDone: () => void }) {
-  const progress = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const progress = useState(() => new Animated.Value(0))[0];
+  const opacity = useState(() => new Animated.Value(1))[0];
 
   useEffect(() => {
     Animated.timing(progress, { toValue: 1, duration: SHOW_MS - 200, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();

@@ -2,13 +2,15 @@ import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { customerActions } from "@core/bookingStore";
-import { getEvent, ticketsLeft } from "@core/data";
+import { ticketsLeft, type EventItem } from "@core/data";
+import { bookingActions } from "@/lib/bookings";
+import { useEvent } from "@/lib/events";
+import { Loading } from "@/ui/Loading";
 import { formatKrw } from "@core/format";
 import { prepareSeatBooking } from "@core/seating";
 import { useSession } from "@/lib/hooks";
 import { SeatPicker } from "@/seats/SeatPicker";
-import { useTakenSeats } from "@/seats/useTakenSeats";
+import { refreshTakenSeats, useTakenSeats } from "@/seats/useTakenSeats";
 import { BOOKING_FEE, MAX_TICKETS } from "@/lib/rules";
 import { Button } from "@/ui/Button";
 import { Card, Row } from "@/ui/Card";
@@ -44,9 +46,15 @@ function Stepper({ label, qty, canAdd, onChange }: { label: string; qty: number;
   );
 }
 
+/** Waits for the event's full details (seat chart included) from the website, then shows the booking form. */
 export default function Book() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const event = getEvent(slug);
+  const { event, loading, missing } = useEvent(slug);
+  if (loading && !missing) return <Loading label="Loading the event…" />;
+  return <BookForm key={slug} slug={slug} event={missing ? undefined : event} />;
+}
+
+function BookForm({ slug, event }: { slug: string; event: EventItem | undefined }) {
   const user = useSession();
 
   // Start with two tickets of the first type that has them, like the website.
@@ -72,6 +80,7 @@ export default function Book() {
   const [names, setNames] = useState<string[]>([]);
   const [terms, setTerms] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   if (!event) {
     return (
@@ -119,41 +128,29 @@ export default function Book() {
     else setPicked([...picked, id]);
   }
 
-  function confirm() {
+  async function confirm() {
     setSubmitted(true);
-    if (!terms || missing || !user) return;
-    if (chart && seated) {
-      // TODO: POST the seats to the API, which holds them in one atomic step, then use the id it returns.
-      const result = customerActions.createSeatedBooking({
-        ownerEmail: user.email,
-        eventSlug: event!.slug,
-        eventTitle: event!.title,
-        eventDate: event!.longDate.replace(/^\w+, /, ""),
-        seatIds: seated.seats.map((s) => s.id),
-        fee: BOOKING_FEE,
-        attendees: slots.map((_, i) => nameAt(i).trim()),
-      });
-      if (!result.ok) {
-        setProblem(result.message);
+    if (!terms || missing || !user || busy) return;
+    // The website checks what is left, sets the prices and holds the seats in one step. The booking starts unpaid
+    // (or confirmed when there is nothing to pay); it is marked paid only by staff.
+    setBusy(true);
+    setProblem(undefined);
+    const attendees = slots.map((_, i) => nameAt(i).trim());
+    const result =
+      chart && seated
+        ? await bookingActions.create({ eventSlug: event!.slug, seatIds: seated.seats.map((s) => s.id), attendees })
+        : await bookingActions.create({ eventSlug: event!.slug, tickets: Object.fromEntries(selection.map(({ type, qty: q }) => [type.id, q])), attendees });
+    setBusy(false);
+    if (!result.ok) {
+      setProblem(result.error);
+      if (chart) {
+        void refreshTakenSeats(event!.slug);
         setStep("tickets");
-        return;
       }
-      setFrozen(prepared);
-      router.replace(`/booking/${result.booking.id}` as never);
       return;
     }
-    // TODO: POST the booking to the API, which re-checks availability and limits, then use the id it returns.
-    // The booking starts unpaid (or confirmed when there is nothing to pay). It is marked paid only by staff.
-    const booking = customerActions.createBooking({
-      ownerEmail: user.email,
-      eventSlug: event!.slug,
-      eventTitle: event!.title,
-      eventDate: event!.longDate.replace(/^\w+, /, ""),
-      lines: selection.map(({ type, qty: q }) => ({ ticketName: type.name, qty: q, unitPrice: type.price })),
-      fee: BOOKING_FEE,
-      attendees: slots.map((_, i) => nameAt(i).trim()),
-    });
-    router.replace(`/booking/${booking.id}` as never);
+    if (chart && seated) setFrozen(prepared);
+    router.replace(`/booking/${result.booking.id}` as never);
   }
 
   return (
@@ -304,7 +301,7 @@ export default function Book() {
           ) : (
             <View style={{ flex: 1, flexDirection: "row", gap: 10 }}>
               <Button title="Back" variant="outline" onPress={() => setStep("tickets")} style={{ flex: 1 }} />
-              <Button title={total === 0 ? "Confirm" : "Place booking"} onPress={confirm} style={{ flex: 2 }} />
+              <Button title={busy ? "Placing your booking…" : total === 0 ? "Confirm" : "Place booking"} onPress={() => void confirm()} disabled={busy} style={{ flex: 2 }} />
             </View>
           )}
         </View>

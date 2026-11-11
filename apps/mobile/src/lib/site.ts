@@ -42,6 +42,11 @@ export function useSiteUrl(): string {
   return (saved.url || defaultSiteUrl()).replace(/\/+$/, "");
 }
 
+/** The website's address outside React (for API calls): the saved one, or the default. */
+export function currentSiteUrl(): string {
+  return (siteStore.getSnapshot().url || defaultSiteUrl()).replace(/\/+$/, "");
+}
+
 /** Saves a new address, or clears it (back to the default) when given an empty string. */
 export function setSiteUrl(value: string): boolean {
   const v = value.trim().replace(/\/+$/, "");

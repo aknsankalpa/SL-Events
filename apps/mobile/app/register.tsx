@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { accountExists, registerAccount, safeNext } from "@core/session";
+import { safeNext } from "@core/session";
+import { account } from "@/lib/account";
 import { AuthShell } from "@/ui/AuthShell";
 import { Button } from "@/ui/Button";
 import { Field } from "@/ui/Field";
@@ -19,19 +20,28 @@ export default function Register() {
   const [errors, setErrors] = useState<Errors>({});
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  function submit() {
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string>();
+
+  async function submit() {
     const found: Errors = {};
     if (!form.name.trim()) found.name = "Enter your name.";
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) found.email = "Enter a valid email address.";
-    else if (accountExists(form.email)) found.email = "There is already an account with this email. Log in instead.";
+    if (!form.email.trim().includes("@")) found.email = "Enter a valid email address.";
     if (form.password.length < 8) found.password = "Use at least 8 characters.";
     if (form.confirm !== form.password) found.confirm = "Passwords do not match.";
     if (!terms) found.terms = "You need to accept the terms to continue.";
     setErrors(found);
-    if (Object.keys(found).length) return;
-    // TODO: call the registration API, which emails the verification code.
-    registerAccount(form.name, form.email);
-    router.replace({ pathname: "/verify", params: { email: form.email.trim().toLowerCase(), next: target } });
+    if (Object.keys(found).length || busy) return;
+    // The website creates the account, signs this phone in and sends the confirmation code.
+    setBusy(true);
+    setFormError(undefined);
+    const result = await account.register(form.name.trim(), form.email.trim(), form.password);
+    setBusy(false);
+    if (!result.ok) {
+      if (result.errors) setErrors(result.errors as Errors);
+      return setFormError(result.error);
+    }
+    router.replace({ pathname: "/verify", params: { email: result.user.email, next: target, ...(result.devCode ? { devCode: result.devCode } : {}) } });
   }
 
   return (
@@ -57,7 +67,12 @@ export default function Register() {
           )}
         </View>
       </View>
-      <Button title="Create account" onPress={submit} />
+      {formError && (
+        <Text variant="small" color={colors.danger} accessibilityRole="alert">
+          {formError}
+        </Text>
+      )}
+      <Button title={busy ? "Creating account…" : "Create account"} onPress={() => void submit()} disabled={busy} />
       <Text center color={colors.muted}>
         Already have an account?{" "}
         <Text color={colors.gold} bold onPress={() => router.replace({ pathname: "/login", params: { next: target } })} accessibilityRole="link">

@@ -3,10 +3,8 @@ import { Linking, Pressable, View } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useSession } from "@/lib/hooks";
 import { notify } from "@/lib/notify";
-import { staffFor } from "@/lib/roles";
-import { ruleFor, staffEvent, type Outcome } from "@/staff/data";
+import { useStaffProfile, ruleFor, staffEvent, type Outcome } from "@/staff/data";
 import { useConnection } from "@/staff/hooks";
 import { resultById, scanRequests, selectGate, type ScanResult } from "@/staff/store";
 import { outcomeLook, StaffHeader } from "@/staff/ui";
@@ -26,6 +24,8 @@ const messages = (r: ScanResult, gate: string): string => {
     wrong_event: `This ticket is for ${r.otherEvent ?? "another event"}.`,
     not_paid: "Payment for this booking hasn't been confirmed, so the ticket isn't active.",
     cancelled: "This ticket was cancelled.",
+    too_early: `Check-in hasn't opened yet${r.timing ? ` (it opens ${r.timing})` : ""}. Ask the guest to wait.`,
+    too_late: `Entry has closed for this event${r.timing ? ` (late cut-off ${r.timing})` : ""}.`,
   };
   return table[r.outcome];
 };
@@ -45,6 +45,9 @@ const rowsFor = (r: ScanResult): [string, string, boolean?][] => {
       return [...base, ["Cancelled", r.cancelledOn ?? "—"]];
     case "wrong_event":
       return [...base, ["Event", r.otherEvent ?? "—"]];
+    case "too_early":
+    case "too_late":
+      return [["Ticket code", r.code, true], [r.outcome === "too_early" ? "Check-in opens" : "Late cut-off", r.timing ?? "—"]];
     default:
       return [];
   }
@@ -58,12 +61,13 @@ const verdict: Record<Outcome, { text: string; icon: "person-circle-outline" | "
   wrong_event: { text: "Do not admit", icon: "ban-outline" },
   not_paid: { text: "Do not admit until payment is confirmed", icon: "ban-outline" },
   cancelled: { text: "Do not admit", icon: "ban-outline" },
+  too_early: { text: "Do not admit yet", icon: "ban-outline" },
+  too_late: { text: "Do not admit", icon: "ban-outline" },
 };
 
 export default function Result() {
   const { event: eventId = "", id = "" } = useLocalSearchParams<{ event?: string; id?: string }>();
-  const user = useSession();
-  const staff = staffFor(user?.email);
+  const staff = useStaffProfile();
   const { online } = useConnection();
   const r = resultById(eventId, id);
   const [left, setLeft] = useState(AUTO_SECONDS);

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { eventForBooking, ticketSummary, type Booking } from "@core/bookings";
+import { ticketSummary, type Booking } from "@core/bookings";
+import { eventOf } from "@/lib/events";
 import { formatKrw } from "@core/format";
 import { useBookings, useSession } from "@/lib/hooks";
 import { Card } from "@/ui/Card";
@@ -32,7 +33,7 @@ function nextStep(b: Booking): string | null {
 }
 
 function BookingCard({ b }: { b: Booking }) {
-  const event = eventForBooking(b);
+  const event = eventOf(b);
   const step = nextStep(b);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${b.eventTitle}, booking ${b.id}`} onPress={() => router.push(`/booking/${b.id}` as never)} style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1 })}>

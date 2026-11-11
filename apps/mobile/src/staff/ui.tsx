@@ -190,6 +190,8 @@ export const outcomeLook: Record<Outcome, Look> = {
   wrong_event: { tone: gold, icon: "calendar-remove-outline", title: "Wrong event" },
   not_paid: { tone: gold, icon: "timer-sand", title: "Not paid yet" },
   cancelled: { tone: stone, icon: "cancel", title: "Cancelled" },
+  too_early: { tone: gold, icon: "clock-outline", title: "Too early" },
+  too_late: { tone: gold, icon: "clock-alert-outline", title: "Too late" },
 };
 
 export const pillTone: Record<Outcome, { bg: string; fg: string }> = {
@@ -200,6 +202,8 @@ export const pillTone: Record<Outcome, { bg: string; fg: string }> = {
   wrong_event: { bg: "#2a200a", fg: colors.gold },
   not_paid: { bg: "#2a200a", fg: colors.gold },
   cancelled: { bg: "#1b1816", fg: "#b9ae9a" },
+  too_early: { bg: "#2a200a", fg: colors.gold },
+  too_late: { bg: "#2a200a", fg: colors.gold },
 };
 
 const styles = StyleSheet.create({

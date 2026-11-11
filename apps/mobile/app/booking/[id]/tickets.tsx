@@ -3,7 +3,8 @@ import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
-import { eventForBooking, ticketsFor } from "@core/bookings";
+import { ticketsFor } from "@core/bookings";
+import { eventOf } from "@/lib/events";
 import { naverMapUrl } from "@core/calendar";
 import { useBooking, useSession } from "@/lib/hooks";
 import { openUrl } from "@/lib/rules";
@@ -51,7 +52,7 @@ export default function Tickets() {
     );
   }
 
-  const event = eventForBooking(booking);
+  const event = eventOf(booking);
   const t = tickets[Math.min(index, tickets.length - 1)]!;
   const go = (d: number) => setIndex((i) => (i + d + tickets.length) % tickets.length);
 

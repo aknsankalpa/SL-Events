@@ -18,6 +18,8 @@ export async function POST(req: Request) {
   if (result === "wrong") return Response.json({ error: "That code isn't right. Check the email and try again." }, { status: 400 });
 
   await db.update(s.users).set({ emailVerifiedAt: new Date() }).where(eq(s.users.id, user.id));
-  if (!me || me.id !== user.id) await startSession(user.id);
-  return Response.json({ user: await toAccountUser((await findUserByEmail(email))!) });
+  const token = !me || me.id !== user.id ? await startSession(user.id) : undefined;
+  // The mobile app keeps a new session's token itself (it has no cookies).
+  const wantsToken = req.headers.get("x-client") === "app" && token;
+  return Response.json({ user: await toAccountUser((await findUserByEmail(email))!), ...(wantsToken ? { token } : {}) });
 }

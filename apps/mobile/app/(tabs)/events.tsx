@@ -3,7 +3,8 @@ import { FlatList, Pressable, ScrollView, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { categories, cities, events, type CategoryId } from "@core/data";
+import { categories, type CategoryId } from "@core/data";
+import { useEvents } from "@/lib/events";
 import { EmptyState } from "@/ui/EmptyState";
 import { EventCard } from "@/ui/EventCard";
 import { Select } from "@/ui/Select";
@@ -32,13 +33,15 @@ export default function Events() {
   const [searchFocus, setSearchFocus] = useState(false);
   const [category, setCategory] = useState<CategoryId | "">((categories.find((c) => c.id === params.category)?.id as CategoryId) ?? "");
   const [city, setCity] = useState("All cities");
+  const { events, loaded, error } = useEvents();
+  const cities = useMemo(() => [...new Set(events.map((e) => e.city).filter(Boolean))].sort(), [events]);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     return [...events]
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
       .filter((e) => (!category || e.category === category) && (city === "All cities" || e.city === city) && (!q || `${e.title} ${e.venue} ${e.city} ${e.tagline}`.toLowerCase().includes(q)));
-  }, [query, category, city]);
+  }, [events, query, category, city]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.page, paddingTop: insets.top + 12 }}>
@@ -81,7 +84,7 @@ export default function Events() {
         renderItem={({ item }) => <EventCard event={item} />}
         contentContainerStyle={{ padding: 20, gap: 16 }}
         keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={<EmptyState icon="search" title="No events found" body="Try a different search, category or city." action="Clear filters" onAction={() => { setQuery(""); setCategory(""); setCity("All cities"); }} />}
+        ListEmptyComponent={!loaded ? <EmptyState icon="hourglass-outline" title="Loading events…" body="Getting the latest events from SL Events." /> : error && !events.length ? <EmptyState icon="cloud-offline-outline" title="Couldn't load events" body={error} /> : <EmptyState icon="search" title="No events found" body="Try a different search, category or city." action="Clear filters" onAction={() => { setQuery(""); setCategory(""); setCity("All cities"); }} />}
       />
     </View>
   );

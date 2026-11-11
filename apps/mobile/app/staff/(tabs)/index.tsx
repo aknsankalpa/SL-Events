@@ -3,17 +3,14 @@ import { Image, Modal, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { coverColors } from "@/theme";
-import { useSession } from "@/lib/hooks";
-import { staffFor } from "@/lib/roles";
+import { coverColors, colors, radius } from "@/theme";
+import { useStaffProfile, staffEvent, type StaffEvent } from "@/staff/data";
 import { notify } from "@/lib/notify";
-import { staffEvent, staffEvents, type StaffEvent } from "@/staff/data";
 import { selectEvent } from "@/staff/store";
 import { useSummary } from "@/staff/summary";
 import { ProgressBar } from "@/staff/ui";
 import { Screen } from "@/ui/Screen";
 import { Text } from "@/ui/Text";
-import { colors, radius } from "@/theme";
 
 const notices = [
   { id: "n1", title: "Doors open at 5:30 PM", body: "Sri Lankan Music Night · Hongdae Live Hall. Be at your door by 5:00 PM." },
@@ -125,8 +122,7 @@ function Row({ event }: { event: StaffEvent }) {
 }
 
 export default function StaffEvents() {
-  const user = useSession();
-  const staff = staffFor(user?.email);
+  const staff = useStaffProfile();
   const [bell, setBell] = useState(false);
   if (!staff) return null;
 

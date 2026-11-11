@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { REFERENCE_DATE, type OrganizerEvent } from "@/lib/organizer";
+import { todayKst, type OrganizerEvent } from "@/lib/organizer";
 import { upcomingOf } from "./UpcomingEvents";
 
 const DOW = ["S", "M", "T", "W", "T", "F", "S"];
@@ -15,7 +15,8 @@ function monthOf(iso: string) {
 /** Month grid with event days marked. Dates are handled in UTC so the grid never shifts with the viewer's timezone. */
 export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
   const upcoming = upcomingOf(events);
-  const first = upcoming[0]?.startsAt ?? REFERENCE_DATE;
+  const todayIso = todayKst();
+  const first = upcoming[0]?.startsAt ?? todayIso;
   const [view, setView] = useState(() => monthOf(first));
 
   const byDay = useMemo(() => {
@@ -84,7 +85,7 @@ export function EventCalendar({ events }: { events: OrganizerEvent[] }) {
           if (day === null) return <span key={i} />;
           const date = iso(day);
           const hits = byDay.get(date);
-          const today = date === REFERENCE_DATE;
+          const today = date === todayIso;
           const base = "mx-auto flex size-8 items-center justify-center rounded-full text-xs lg:size-7 lg:[@media(max-height:760px)]:size-6";
           if (hits) {
             return (

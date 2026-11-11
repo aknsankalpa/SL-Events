@@ -3,9 +3,11 @@ import { Alert, Platform, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
-import { canIssueTickets, customerCan, eventForBooking, ticketSummary, type Booking } from "@core/bookings";
-import { customerActions } from "@core/bookingStore";
-import { paymentAccount } from "@core/data";
+import { canIssueTickets, customerCan, ticketSummary, type Booking } from "@core/bookings";
+import { bookingActions } from "@/lib/bookings";
+import { eventOf } from "@/lib/events";
+import { usePaymentAccount } from "@/lib/siteConfig";
+import { notify } from "@/lib/notify";
 import { formatKrw } from "@core/format";
 import { receiptNumber } from "@core/receipt";
 import { useBooking, useSession } from "@/lib/hooks";
@@ -94,6 +96,7 @@ function confirm(title: string, message: string, action: string, run: () => void
 
 function PaymentDetails({ booking }: { booking: Booking }) {
   const left = useCountdown(booking.payByIso);
+  const paymentAccount = usePaymentAccount();
   return (
     <>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.gold + "66", backgroundColor: colors.gold + "1a" }}>
@@ -142,7 +145,7 @@ export default function BookingScreen() {
     );
   }
 
-  const event = eventForBooking(booking);
+  const event = eventOf(booking);
   const unpaid = booking.status === "awaiting_payment" || booking.status === "proof_rejected";
   const tickets = canIssueTickets(booking);
 
@@ -207,7 +210,10 @@ export default function BookingScreen() {
           accessibilityRole="button"
           onPress={() =>
             confirm("Cancel this booking?", "Your held tickets go back on sale. This cannot be undone.", "Cancel booking", () => {
-              customerActions.cancelBooking(booking.id);
+              // The website cancels it and frees the held tickets and seats.
+              void bookingActions.cancel(booking.id).then((r) => {
+                if (!r.ok) notify("Couldn't cancel", r.error);
+              });
             })
           }
         >

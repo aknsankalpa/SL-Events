@@ -93,7 +93,8 @@ export const authCodes = mysqlTable(
   {
     id: id(),
     email: varchar("email", { length: 191 }).notNull(),
-    purpose: mysqlEnum("purpose", ["verify_email", "reset_password"]).notNull(),
+    /** "app_handoff": a one-time code that signs the app's built-in browser in (organizer and admin screens). */
+    purpose: mysqlEnum("purpose", ["verify_email", "reset_password", "app_handoff"]).notNull(),
     codeHash: varchar("code_hash", { length: 255 }).notNull(),
     expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
     usedAt: datetime("used_at", { mode: "date" }),

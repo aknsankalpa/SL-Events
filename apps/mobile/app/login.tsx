@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { safeNext, signIn } from "@core/session";
+import { safeNext } from "@core/session";
+import { account } from "@/lib/account";
 import { homeFor } from "@/lib/view";
 import { AuthShell } from "@/ui/AuthShell";
 import { Button } from "@/ui/Button";
@@ -16,14 +17,20 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  function submit() {
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
     const found: typeof errors = {};
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) found.email = "Enter a valid email address.";
+    if (!email.trim().includes("@")) found.email = "Enter a valid email address.";
     if (!password) found.password = "Enter your password.";
     setErrors(found);
-    if (Object.keys(found).length) return;
-    // TODO: check the password with the auth API; for now any valid email and password signs in.
-    const user = signIn(email.trim());
+    if (Object.keys(found).length || busy) return;
+    // The website checks the password and says which roles the account holds.
+    setBusy(true);
+    const result = await account.login(email.trim(), password);
+    setBusy(false);
+    if (!result.ok) return setErrors({ password: result.error ?? "That email and password don't match an account." });
+    const user = result.user;
     // Staff, organizers and admins go to their own area whatever page they came from.
     const home = homeFor(user.email);
     if (home !== "/") router.replace(home);
@@ -35,12 +42,12 @@ export default function Login() {
     <AuthShell title="Log in" subtitle={target !== "/" ? "Log in to continue. You will come straight back." : "See your tickets and book faster."}>
       <View style={{ gap: 16 }}>
         <Field label="Email" value={email} onChangeText={setEmail} error={errors.email} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" placeholder="you@example.com" />
-        <Field label="Password" value={password} onChangeText={setPassword} error={errors.password} password autoComplete="password" textContentType="password" placeholder="Your password" onSubmitEditing={submit} />
+        <Field label="Password" value={password} onChangeText={setPassword} error={errors.password} password autoComplete="password" textContentType="password" placeholder="Your password" onSubmitEditing={() => void submit()} />
         <Text variant="small" color={colors.gold} bold onPress={() => router.push("/forgot")} accessibilityRole="link" style={{ alignSelf: "flex-end" }}>
           Forgot password?
         </Text>
       </View>
-      <Button title="Log in" onPress={submit} />
+      <Button title={busy ? "Logging in…" : "Log in"} onPress={() => void submit()} disabled={busy} />
       <Text center color={colors.muted}>
         New here?{" "}
         <Text color={colors.gold} bold onPress={() => router.replace({ pathname: "/register", params: { next: target } })} accessibilityRole="link">
@@ -49,9 +56,6 @@ export default function Login() {
       </Text>
       <Text variant="small" color={colors.gold} bold center onPress={() => router.push("/staff/login")} accessibilityRole="link">
         Event staff? Sign in here
-      </Text>
-      <Text variant="small" color={colors.dim} center>
-        Demo: any valid email and password works. kasun@example.com has sample bookings.
       </Text>
     </AuthShell>
   );

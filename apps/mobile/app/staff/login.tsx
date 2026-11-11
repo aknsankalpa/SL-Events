@@ -3,8 +3,8 @@ import { Image, KeyboardAvoidingView, Platform, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { signIn } from "@core/session";
-import { staffFor } from "@/lib/roles";
+import { account } from "@/lib/account";
+import { loadStaff, staffEvents } from "@/staff/data";
 import { Button } from "@/ui/Button";
 import { Field } from "@/ui/Field";
 import { Screen } from "@/ui/Screen";
@@ -17,15 +17,24 @@ export default function StaffLogin() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  function submit() {
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
     const found: typeof errors = {};
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) found.email = "Enter a valid email address.";
-    else if (!staffFor(email)) found.email = "This email isn't on a door-staff team. Ask your event organizer to invite you.";
     if (!password) found.password = "Enter your password.";
     setErrors(found);
-    if (Object.keys(found).length) return;
-    // TODO: check the password with the auth API; the account's role comes from the server.
-    signIn(email.trim());
+    if (Object.keys(found).length || busy) return;
+    // The website checks the password, then says which events this account checks tickets in for.
+    setBusy(true);
+    const result = await account.login(email.trim(), password);
+    if (!result.ok) {
+      setBusy(false);
+      return setErrors({ password: result.error ?? "That email and password don't match an account." });
+    }
+    await loadStaff(result.user.email);
+    setBusy(false);
+    if (!staffEvents().length) return setErrors({ email: "This account isn't on a door-staff team. Ask your event organizer to add you." });
     router.replace("/staff");
   }
 
@@ -53,9 +62,9 @@ export default function StaffLogin() {
 
         <View style={{ gap: 16, marginTop: 12 }}>
           <Field label="Email" value={email} onChangeText={setEmail} error={errors.email} keyboardType="email-address" autoComplete="email" placeholder="you@example.com" />
-          <Field label="Password" value={password} onChangeText={setPassword} error={errors.password} password autoComplete="password" placeholder="Your password" onSubmitEditing={submit} />
+          <Field label="Password" value={password} onChangeText={setPassword} error={errors.password} password autoComplete="password" placeholder="Your password" onSubmitEditing={() => void submit()} />
         </View>
-        <Button title="Sign in" onPress={submit} />
+        <Button title={busy ? "Signing in…" : "Sign in"} onPress={() => void submit()} disabled={busy} />
 
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
           <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
@@ -70,9 +79,6 @@ export default function StaffLogin() {
         </Text>
         <Text variant="small" color={colors.gold} bold center onPress={() => router.replace("/login")} accessibilityRole="link">
           Not event staff? Use the main sign in
-        </Text>
-        <Text variant="caption" color={colors.dim} center>
-          Demo: ishara@slevents.kr with any password
         </Text>
       </Screen>
     </KeyboardAvoidingView>

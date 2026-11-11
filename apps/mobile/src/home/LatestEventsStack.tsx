@@ -38,13 +38,15 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
   const [width, setWidth] = useState(0);
   const [hold, setHold] = useState(false);
   const [still, setStill] = useState(false);
-  const slots = useRef(events.map((_, i) => new Animated.Value(slotOf(i, count)))).current;
+  const slots = useState(() => events.map((_, i) => new Animated.Value(slotOf(i, count))))[0];
   const last = useRef(events.map((_, i) => slotOf(i, count)));
-  const drag = useRef(new Animated.Value(0)).current;
+  const drag = useState(() => new Animated.Value(0))[0];
   const busy = useRef(false);
   // The handlers below are made once, so they read the newest values from here.
   const live = useRef({ active, width, count });
-  live.current = { active, width, count };
+  useEffect(() => {
+    live.current = { active, width, count };
+  });
 
   const go = (to: number) => setActive(((to % count) + count) % count);
 
@@ -77,7 +79,9 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
     return () => clearTimeout(id);
   }, [active, hold, still, count]);
 
-  const pan = useRef(
+  // The refs are read only inside the drag handlers, never while rendering; the rule can't see that through PanResponder.
+  // eslint-disable-next-line react-hooks/refs
+  const [pan] = useState(() =>
     PanResponder.create({
       // Only a sideways drag belongs to the stack; an up-and-down drag still scrolls the page.
       onMoveShouldSetPanResponder: (_, g) => !busy.current && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
@@ -109,7 +113,7 @@ export function LatestEventsStack({ events }: { events: EventItem[] }) {
         Animated.spring(drag, { toValue: 0, useNativeDriver: NATIVE_DRIVER }).start();
       },
     }),
-  ).current;
+  );
 
   if (count === 0) return null;
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);

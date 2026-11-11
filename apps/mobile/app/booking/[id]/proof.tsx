@@ -4,9 +4,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { customerCan } from "@core/bookings";
-import { customerActions } from "@core/bookingStore";
 import { banks } from "@core/data";
 import { formatKrw } from "@core/format";
+import { bookingActions } from "@/lib/bookings";
 import { useBooking, useSession } from "@/lib/hooks";
 import { Button } from "@/ui/Button";
 import { Card, Row } from "@/ui/Card";
@@ -20,7 +20,7 @@ import { colors, radius } from "@/theme";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
-type Picked = { uri: string; name: string; size?: number };
+type Picked = { uri: string; name: string; type?: string; size?: number };
 
 export default function Proof() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,6 +31,8 @@ export default function Proof() {
   const [sender, setSender] = useState((user?.name ?? "").toUpperCase());
   const [bank, setBank] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState<string>();
 
   if (!user) {
     return (
@@ -60,7 +62,7 @@ export default function Proof() {
     if (!a) return;
     if (a.fileSize && a.fileSize > MAX_BYTES) return setFileError("That file is larger than 10 MB.");
     setFileError(undefined);
-    setFile({ uri: a.uri, name: a.fileName ?? "transfer-receipt.jpg", size: a.fileSize });
+    setFile({ uri: a.uri, name: a.fileName ?? "transfer-receipt.jpg", type: a.mimeType, size: a.fileSize });
   }
 
   async function fromLibrary() {
@@ -74,18 +76,16 @@ export default function Proof() {
     accept(await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 }));
   }
 
-  function submit() {
+  async function submit() {
     setSubmitted(true);
-    if (!file || !sender.trim() || !booking) return;
-    // TODO: upload the receipt to storage and send the details to the API. The booking only becomes "under review":
-    // it is marked paid when staff have checked the transfer, never from here.
-    const ok = customerActions.submitProof(booking.id, {
-      fileName: file.name,
-      sizeLabel: file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "—",
-      sender: sender.trim(),
-      bank,
-    });
-    router.replace(ok ? (`/booking/${booking.id}` as never) : "/tickets");
+    if (!file || !sender.trim() || !booking || busy) return;
+    // The booking only becomes "under review": it is marked paid when staff have checked the transfer, never from here.
+    setBusy(true);
+    setSendError(undefined);
+    const r = await bookingActions.submitProof(booking.id, { uri: file.uri, name: file.name, type: file.type }, { sender: sender.trim(), bank });
+    setBusy(false);
+    if (r.ok) router.replace(`/booking/${booking.id}` as never);
+    else setSendError(r.errors && Object.keys(r.errors).length ? Object.values(r.errors).join(" ") : r.error);
   }
 
   return (
@@ -134,7 +134,12 @@ export default function Proof() {
       <Field label="Name on the transfer" value={sender} onChangeText={setSender} autoCapitalize="characters" error={submitted && !sender.trim() ? "Enter the sender name." : undefined} />
       <Select label="Your bank (optional)" value={bank} options={banks} onChange={setBank} placeholder="Choose your bank" />
 
-      <Button title="Send for checking" onPress={submit} />
+      {sendError && (
+        <Text variant="small" color={colors.danger} accessibilityRole="alert">
+          {sendError}
+        </Text>
+      )}
+      <Button title={busy ? "Sending…" : "Send for checking"} onPress={submit} disabled={busy} />
       <Text variant="small" color={colors.dim} center>
         Sending proof does not confirm your tickets. Our team checks the transfer first.
       </Text>

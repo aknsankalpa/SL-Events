@@ -3,7 +3,8 @@ import { ActivityIndicator, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { signOut } from "@core/session";
+import { account } from "@/lib/account";
+import { api } from "@/lib/api";
 import { useSession } from "@/lib/hooks";
 import { homeForRole, portalFor, roleLabels, rolesFor, type Role } from "@/lib/roles";
 import { isValidSiteUrl, setSiteUrl, useSiteUrl } from "@/lib/site";
@@ -39,6 +40,20 @@ export function PortalScreen({ section }: { section: Section }) {
   const roles = rolesFor(user?.email);
   const portal = portalFor(user?.email);
   const url = `${base}${meta[section].path}`;
+  // The first load signs the built-in browser in with a one-time code from the website, so nobody logs in twice.
+  // After that the browser has its own session; if the code can't be fetched, the website just asks to log in.
+  const [frame, setFrame] = useState<{ for: string; url: string } | null>(null);
+  const frameUrl = frame?.for === url ? frame.url : null;
+  useEffect(() => {
+    let live = true;
+    void api<{ code?: string }>("/api/auth/handoff", { body: {} }).then(({ ok, data }) => {
+      if (!live) return;
+      setFrame({ for: url, url: ok && data.code ? `${base}/api/auth/handoff?code=${encodeURIComponent(data.code)}&next=${encodeURIComponent(meta[section].path)}` : url });
+    });
+    return () => {
+      live = false;
+    };
+  }, [base, section, url]);
 
   // Never spin forever: if the website hasn't finished loading after a while, show the "can't reach it" screen.
   useEffect(() => {
@@ -55,8 +70,7 @@ export function PortalScreen({ section }: { section: Section }) {
     setReloadKey((k) => k + 1);
   };
   const leave = () => {
-    signOut();
-    router.replace("/login");
+    void account.logout().then(() => router.replace("/login"));
   };
   const switchTo = (label: string) => {
     const role = (Object.keys(roleLabels) as Role[]).find((r) => roleLabels[r] === label);
@@ -90,9 +104,9 @@ export function PortalScreen({ section }: { section: Section }) {
       </View>
 
       <View style={{ flex: 1 }}>
-        {state !== "error" && (
+        {state !== "error" && frameUrl && (
           <PortalFrame
-            url={url}
+            url={frameUrl}
             base={base}
             reloadKey={reloadKey}
             onLoaded={() => setState((s) => (s === "error" ? s : "ready"))}

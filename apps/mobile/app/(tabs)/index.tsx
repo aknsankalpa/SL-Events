@@ -2,10 +2,11 @@ import { Pressable, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { canIssueTickets, eventForBooking, ticketCount } from "@core/bookings";
-import { categories, homeEvents, latestEvents, totalUpcomingEvents } from "@core/data";
+import { canIssueTickets, ticketCount } from "@core/bookings";
+import { categories } from "@core/data";
+import { eventOf, latestOf, useEvents } from "@/lib/events";
 import { recommend } from "@core/recommendations";
-import { useBookings, useCustomerSettings, useSession } from "@/lib/hooks";
+import { useBookings, useCustomerSettings, useNow, useSession } from "@/lib/hooks";
 import { LatestEventsStack } from "@/home/LatestEventsStack";
 import { EventCover } from "@/ui/EventCover";
 import { EventCard } from "@/ui/EventCard";
@@ -19,15 +20,21 @@ export default function Home() {
   const user = useSession();
   const bookings = useBookings();
   const settings = useCustomerSettings(user?.email ?? "");
+  // Published events from the website.
+  const { events } = useEvents();
+  const latestEvents = latestOf(events);
+  const featured = events.filter((e) => e.featured);
+  const homeEvents = featured.length ? featured : events.slice(0, 6);
 
   // The next event the customer holds valid QR tickets for.
+  const now = useNow();
   const next = bookings
     .filter((b) => canIssueTickets(b) && b.status === "confirmed")
-    .map((b) => ({ b, e: eventForBooking(b) }))
-    .filter(({ e }) => !e.startsAt || new Date(e.startsAt).getTime() > Date.now())
+    .map((b) => ({ b, e: eventOf(b) }))
+    .filter(({ e }) => !e.startsAt || new Date(e.startsAt).getTime() > now)
     .sort((a, c) => new Date(a.e.startsAt || 0).getTime() - new Date(c.e.startsAt || 0).getTime())[0];
 
-  const picks = user ? recommend(bookings, settings.city, 3) : [];
+  const picks = user ? recommend(bookings, settings.city, 3, events) : [];
 
   return (
     <Screen topInset style={{ gap: 24 }}>
@@ -49,7 +56,7 @@ export default function Home() {
       </Pressable>
 
       {/* Visitors get the latest events as stacked cards, like the website's home page. */}
-      {!user && <LatestEventsStack events={latestEvents} />}
+      {!user && latestEvents.length > 0 && <LatestEventsStack key={latestEvents.map((e) => e.slug).join(",")} events={latestEvents} />}
 
       {user ? (
         next ? (
@@ -118,7 +125,7 @@ export default function Home() {
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text variant="heading">Events near you</Text>
           <Text variant="small" color={colors.gold} bold onPress={() => router.push("/events")} accessibilityRole="link">
-            See all {totalUpcomingEvents}
+            See all {events.length}
           </Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>

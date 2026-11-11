@@ -1,8 +1,9 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { applicationStore, statusMeta, type Application, type ApplicationStatus } from "@core/organizerApplications";
+import { statusMeta, type Application, type ApplicationStatus } from "@core/organizerApplications";
+import { api, OFFLINE } from "@/lib/api";
 import { Badge } from "@/ui/Badge";
 import { Button } from "@/ui/Button";
 import { Card } from "@/ui/Card";
@@ -19,20 +20,40 @@ const dateOf = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day:
 /** Look up an organizer application by its reference and email, like the website's status page. */
 export default function ApplicationStatusScreen() {
   const params = useLocalSearchParams<{ ref?: string; email?: string; sent?: string }>();
-  const apps = useSyncExternalStore(applicationStore.subscribe, applicationStore.getSnapshot, applicationStore.getServerSnapshot);
   const [lookup, setLookup] = useState(params.ref && params.email ? { ref: params.ref, email: params.email } : null);
+  const [result, setResult] = useState<Application>();
+  const [lookupError, setLookupError] = useState<string>();
+  const [busy, setBusy] = useState(!!(params.ref && params.email));
   const [ref, setRef] = useState(params.ref ?? "");
   const [email, setEmail] = useState(params.email ?? "");
   const [errors, setErrors] = useState<{ ref?: string; email?: string }>({});
 
-  const result = lookup ? apps.find((a) => a.ref === lookup.ref.trim().toUpperCase() && a.email === lookup.email.trim().toLowerCase()) : undefined;
+  // The website answers only when both the reference and the email match.
+  useEffect(() => {
+    if (!lookup) return;
+    let live = true;
+    const q = `ref=${encodeURIComponent(lookup.ref.trim().toUpperCase())}&email=${encodeURIComponent(lookup.email.trim().toLowerCase())}`;
+    void api<{ application?: Application }>(`/api/organizer-applications/status?${q}`).then(({ ok, status, data }) => {
+      if (!live) return;
+      setBusy(false);
+      if (ok && data.application) setResult(data.application);
+      else setLookupError(status === 404 ? "We couldn't find an application with that reference and email. Check both and try again." : (data.error ?? OFFLINE));
+    });
+    return () => {
+      live = false;
+    };
+  }, [lookup]);
 
   function check() {
     const found: typeof errors = {};
     if (!ref.trim()) found.ref = "Enter the reference we gave you, like ORG-1234.";
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) found.email = "Enter the email you applied with.";
     setErrors(found);
-    if (Object.keys(found).length === 0) setLookup({ ref, email });
+    if (Object.keys(found).length) return;
+    setBusy(true);
+    setResult(undefined);
+    setLookupError(undefined);
+    setLookup({ ref, email });
   }
 
   return (
@@ -49,7 +70,10 @@ export default function ApplicationStatusScreen() {
       {result ? (
         <>
           <ResultCard app={result} />
-          <Text variant="small" color={colors.gold} bold accessibilityRole="link" onPress={() => setLookup(null)}>
+          <Text variant="small" color={colors.gold} bold accessibilityRole="link" onPress={() => {
+              setLookup(null);
+              setResult(undefined);
+            }}>
             Check a different application
           </Text>
         </>
@@ -61,12 +85,12 @@ export default function ApplicationStatusScreen() {
           </Text>
           <Field label="Reference" value={ref} onChangeText={setRef} autoCapitalize="characters" placeholder="ORG-1234" error={errors.ref} />
           <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" placeholder="you@example.com" error={errors.email} />
-          {lookup && (
+          {lookupError && !busy && (
             <Text variant="small" color={colors.danger} accessibilityRole="alert">
-              We couldn&apos;t find an application with that reference and email. Check both and try again.
+              {lookupError}
             </Text>
           )}
-          <Button title="Check status" onPress={check} />
+          <Button title="Check status" loading={busy} onPress={check} />
         </Card>
       )}
     </Screen>

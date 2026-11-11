@@ -3,7 +3,8 @@ import { Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
-import { eventKinds, openApplicationFor, submitApplication } from "@core/organizerApplications";
+import { eventKinds, type Application } from "@core/organizerApplications";
+import { api, appendFile, OFFLINE } from "@/lib/api";
 import { useSession } from "@/lib/hooks";
 import { Button } from "@/ui/Button";
 import { Card } from "@/ui/Card";
@@ -18,7 +19,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = ["application/pdf", "image/png", "image/jpeg"];
 
 type Errors = Partial<Record<"name" | "email" | "organization" | "about" | "terms" | "documents", string>>;
-type Doc = { name: string; size: number };
+type Doc = { uri: string; name: string; size: number; type: string };
 
 const formatSize = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
@@ -42,23 +43,26 @@ export default function BecomeOrganizer() {
   const [terms, setTerms] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [aboutFocus, setAboutFocus] = useState(false);
-  const [existing, setExisting] = useState<{ ref: string; email: string }>();
+  const [existing, setExisting] = useState<{ ref?: string; email: string }>();
+  const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState<string>();
 
   async function attach() {
-    const result = await DocumentPicker.getDocumentAsync({ type: ACCEPT, multiple: true, copyToCacheDirectory: false });
+    const result = await DocumentPicker.getDocumentAsync({ type: ACCEPT, multiple: true });
     if (result.canceled) return;
-    const incoming = result.assets.map((a) => ({ name: a.name, size: a.size ?? 0, type: a.mimeType ?? "" }));
+    const incoming: Doc[] = result.assets.map((a) => ({ uri: a.uri, name: a.name, size: a.size ?? 0, type: a.mimeType ?? "" }));
     const bad = incoming.find((f) => f.type && !ACCEPT.includes(f.type));
     if (bad) return setErrors((e) => ({ ...e, documents: `${bad.name} isn't a PDF, PNG or JPG.` }));
     const big = incoming.find((f) => f.size > MAX_BYTES);
     if (big) return setErrors((e) => ({ ...e, documents: `${big.name} is larger than 5 MB.` }));
-    const next = [...docs, ...incoming.map(({ name: n, size }) => ({ name: n, size }))];
+    const next = [...docs, ...incoming];
     if (next.length > MAX_FILES) return setErrors((e) => ({ ...e, documents: `Attach up to ${MAX_FILES} files.` }));
     setErrors((e) => ({ ...e, documents: undefined }));
     setDocs(next);
   }
 
-  function send() {
+  async function send() {
+    if (busy) return;
     const found: Errors = {};
     if (!name.trim()) found.name = "Enter your name.";
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) found.email = "Enter a valid email address.";
@@ -68,23 +72,28 @@ export default function BecomeOrganizer() {
     setErrors((cur) => ({ ...found, documents: cur.documents }));
     if (Object.keys(found).length) return;
 
-    const open = openApplicationFor(email);
-    if (open) {
-      setExisting({ ref: open.ref, email: open.email });
+    // The website checks everything again, stores the files privately and refuses a second open application.
+    setBusy(true);
+    setSendError(undefined);
+    setExisting(undefined);
+    const form = new FormData();
+    const fields = { name, email, contact, organization, kind, about, link };
+    for (const [k, v] of Object.entries(fields)) form.append(k, v.trim());
+    try {
+      for (const d of docs) await appendFile(form, "documents", { uri: d.uri, name: d.name, type: d.type || undefined });
+    } catch {
+      setBusy(false);
+      return setErrors((e) => ({ ...e, documents: "One of the files couldn't be read. Remove it and attach it again." }));
+    }
+    const { ok, status, data } = await api<{ application?: Application; existingRef?: string }>("/api/organizer-applications", { body: form });
+    setBusy(false);
+    if (ok && data.application) {
+      router.replace({ pathname: "/become-organizer/status", params: { ref: data.application.ref, email: data.application.email, sent: "1" } });
       return;
     }
-    // TODO: POST the application and upload the attached files through the API.
-    const app = submitApplication({
-      name: name.trim(),
-      email: email.trim(),
-      contact: contact.trim(),
-      organization: organization.trim(),
-      kind,
-      about: about.trim(),
-      link: link.trim(),
-      documents: docs,
-    });
-    router.replace({ pathname: "/become-organizer/status", params: { ref: app.ref, email: app.email, sent: "1" } });
+    if (status === 409) return setExisting({ ref: data.existingRef, email: email.trim() });
+    if (data.errors) setErrors((e) => ({ ...e, ...data.errors }));
+    setSendError(data.error ?? OFFLINE);
   }
 
   return (
@@ -229,14 +238,21 @@ export default function BecomeOrganizer() {
 
       {existing && (
         <Card style={{ gap: 8, borderColor: colors.amber + "66", backgroundColor: colors.amber + "14" }}>
-          <Text variant="small">There&apos;s already an application for this email that hasn&apos;t been decided yet ({existing.ref}).</Text>
-          <Text variant="label" color={colors.amber} accessibilityRole="link" onPress={() => router.push({ pathname: "/become-organizer/status", params: existing })}>
+          <Text variant="small">
+            There&apos;s already an application for this email that hasn&apos;t been decided yet{existing.ref ? ` (${existing.ref})` : ""}. Use the reference from your confirmation email to check it.
+          </Text>
+          <Text variant="label" color={colors.amber} accessibilityRole="link" onPress={() => router.push({ pathname: "/become-organizer/status", params: existing.ref ? { ref: existing.ref, email: existing.email } : { email: existing.email } })}>
             Check its status
           </Text>
         </Card>
       )}
 
-      <Button title="Send application" onPress={send} />
+      {sendError && !existing && (
+        <Text variant="small" color={colors.danger} accessibilityRole="alert">
+          {sendError}
+        </Text>
+      )}
+      <Button title="Send application" loading={busy} onPress={() => void send()} />
       <Text variant="small" color={colors.gold} bold center accessibilityRole="link" onPress={() => router.push("/become-organizer/status")}>
         Already applied? Check your application
       </Text>

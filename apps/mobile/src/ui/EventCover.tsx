@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Platform, View, type ImageSourcePropType } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { CategoryId } from "@core/data";
@@ -32,8 +32,8 @@ const motion: Record<CategoryId, { rotate?: number; scale?: number; lift?: numbe
 
 /** The category picture on a light disc that floats gently. Holds still when the phone asks for less motion. */
 function CategoryArt({ category, size }: { category: CategoryId; size: number }) {
-  const float = useRef(new Animated.Value(0)).current;
-  const move = useRef(new Animated.Value(0)).current;
+  const float = useState(() => new Animated.Value(0))[0];
+  const move = useState(() => new Animated.Value(0))[0];
   const [still, setStill] = useState(false);
 
   useEffect(() => {

@@ -2,9 +2,7 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNow } from "@/lib/hooks";
-import { useSession } from "@/lib/hooks";
-import { staffFor } from "@/lib/roles";
-import { outcomeMeta, staffEvent } from "@/staff/data";
+import { useStaffProfile, outcomeMeta, staffEvent } from "@/staff/data";
 import { useConnection } from "@/staff/hooks";
 import { useStaffState } from "@/staff/store";
 import { useSummary } from "@/staff/summary";
@@ -16,8 +14,7 @@ import { colors, radius } from "@/theme";
 const panel = { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, padding: 16, gap: 14 } as const;
 
 export default function Summary() {
-  const user = useSession();
-  const staff = staffFor(user?.email);
+  const staff = useStaffProfile();
   const { eventId } = useStaffState();
   const event = staffEvent(eventId);
   const s = useSummary(eventId);

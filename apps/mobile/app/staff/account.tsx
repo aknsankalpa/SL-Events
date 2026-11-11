@@ -1,10 +1,8 @@
 import { Linking, Pressable, Switch, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, router } from "expo-router";
-import { signOut } from "@core/session";
-import { useSession } from "@/lib/hooks";
-import { staffFor } from "@/lib/roles";
-import { staffEvent } from "@/staff/data";
+import { account } from "@/lib/account";
+import { clearStaff, useStaffProfile, staffEvent } from "@/staff/data";
 import { setOffline, useStaffState } from "@/staff/store";
 import { Button } from "@/ui/Button";
 import { Card, Row } from "@/ui/Card";
@@ -14,8 +12,7 @@ import { colors } from "@/theme";
 
 /** The staff member's account: who they are, who to call, and sign out. */
 export default function StaffAccount() {
-  const user = useSession();
-  const staff = staffFor(user?.email);
+  const staff = useStaffProfile();
   const { offline, gate, eventId } = useStaffState();
   if (!staff) return <Redirect href="/staff/login" />;
 
@@ -75,8 +72,9 @@ export default function StaffAccount() {
       <Button
         title="Sign out"
         variant="outline"
-        onPress={() => {
-          signOut();
+        onPress={async () => {
+          await account.logout();
+          clearStaff();
           router.dismissAll();
           router.replace("/staff/login");
         }}

@@ -1,7 +1,9 @@
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { categories, fromPrice, getEvent, ticketsLeft } from "@core/data";
+import { categories, fromPrice, ticketsLeft } from "@core/data";
+import { useEvent } from "@/lib/events";
+import { Loading } from "@/ui/Loading";
 import { formatKrw, formatPrice } from "@core/format";
 import { SeatPicker } from "@/seats/SeatPicker";
 import { useTakenSeats } from "@/seats/useTakenSeats";
@@ -37,9 +39,11 @@ function Info({ icon, title, sub, onPress }: { icon: keyof typeof Ionicons.glyph
 
 export default function EventDetails() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const event = getEvent(slug);
+  // The website's copy of the event: the list's version shows at once, the full one (with the seat chart) follows.
+  const { event, missing } = useEvent(slug);
   const taken = useTakenSeats(slug ?? "");
 
+  if (!event && !missing) return <Loading label="Loading the event…" />;
   if (!event) {
     return (
       <Screen>

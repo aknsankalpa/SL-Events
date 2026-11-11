@@ -21,6 +21,9 @@ export function classify(target: string, base: string): Decision {
   if (url.protocol === "mailto:" || url.protocol === "tel:") return { kind: "external", url: target };
   if (url.origin !== site.origin) return { kind: "external", url: target };
   const path = url.pathname.replace(/\/+$/, "") || "/";
+  // The website asking to log in on the way back to the portal ("/login?next=/organizer") stays inside: the person can
+  // sign in there. A plain home or log-in page means the website's own "Log out" was used.
+  if (path === "/login" && url.searchParams.has("next")) return { kind: "allow" };
   if (path === "/" || path === "/login") return { kind: "logout" };
   const event = path.match(/^\/events\/([^/]+)$/);
   if (event) return { kind: "event", slug: decodeURIComponent(event[1]!) };

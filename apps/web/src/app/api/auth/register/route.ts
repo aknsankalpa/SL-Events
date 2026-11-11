@@ -21,7 +21,9 @@ export async function POST(req: Request) {
   const [created] = await db.insert(s.users).values({ email, name, passwordHash: await hashPassword(password) }).$returningId();
   await db.insert(s.userRoles).values({ userId: created!.id, role: "customer" });
   const code = await issueCode(email, "verify_email");
-  await startSession(created!.id);
+  const token = await startSession(created!.id);
   const user = (await findUserByEmail(email))!;
-  return Response.json({ user: await toAccountUser(user), ...(showCodes ? { devCode: code } : {}) }, { status: 201 });
+  // The mobile app keeps the token itself (it has no cookies); the website relies on the cookie.
+  const wantsToken = req.headers.get("x-client") === "app";
+  return Response.json({ user: await toAccountUser(user), ...(showCodes ? { devCode: code } : {}), ...(wantsToken ? { token } : {}) }, { status: 201 });
 }

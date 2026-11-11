@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert, Platform, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { deleteAccount, signOut, updateProfile } from "@core/session";
+import { account } from "@/lib/account";
 import { historyTotals } from "@core/bookings";
 import { formatKrw } from "@core/format";
 import { useBookings, useSession } from "@/lib/hooks";
@@ -72,11 +72,11 @@ export default function Profile() {
   const otherRole = rolesFor(user.email).find((r) => r !== "customer" && r !== "visitor");
   const draft = name ?? user.name;
 
-  function save() {
+  async function save() {
     if (!draft.trim()) return setError("Enter your name.");
     setError(undefined);
-    // TODO: save the profile through the API.
-    updateProfile({ name: draft });
+    const result = await account.updateName(draft.trim());
+    if (!result.ok) return setError(result.error ?? result.errors?.name ?? "Couldn't save your name.");
     setName(undefined);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -135,7 +135,7 @@ export default function Profile() {
       <Card style={{ paddingVertical: 2 }}>
         <MenuRow icon="help-circle-outline" label="Help and FAQ" sub="Payments, tickets, contact" onPress={() => router.push("/help")} />
         <View style={{ height: 1, backgroundColor: colors.line }} />
-        <MenuRow icon="scan-outline" label="Ticket scanner" sub="For organizers and door staff" onPress={() => router.push("/scanner")} />
+        <MenuRow icon="scan-outline" label="Ticket scanner" sub="For organizers and door staff" onPress={() => router.push("/staff/scan")} />
         {!rolesFor(user.email).includes("organizer") && (
           <>
             <View style={{ height: 1, backgroundColor: colors.line }} />
@@ -161,8 +161,8 @@ export default function Profile() {
       <Button
         title="Log out"
         variant="outline"
-        onPress={() => {
-          signOut();
+        onPress={async () => {
+          await account.logout();
           router.replace("/");
         }}
       />
@@ -173,8 +173,10 @@ export default function Profile() {
         accessibilityRole="button"
         onPress={() =>
           confirm("Delete your account?", "Your account closes and you are signed out. Payment records are kept for the period the law requires.", "Delete", () => {
-            deleteAccount(user.email);
-            router.replace("/");
+            void account.deleteAccount().then((r) => {
+              if (r.ok) router.replace("/");
+              else setError(r.error);
+            });
           })
         }
       >

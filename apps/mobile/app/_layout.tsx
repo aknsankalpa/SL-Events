@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Montserrat_400Regular, Montserrat_500Medium, Montserrat_700Bold, useFonts } from "@expo-google-fonts/montserrat";
 import { Cinzel_700Bold } from "@expo-google-fonts/cinzel";
+import { refreshAccount } from "@/lib/account";
 import { prepareStorage } from "@/lib/storage";
 import { fitWebViewport } from "@/lib/webViewport";
 import { SplashScreen } from "@/ui/SplashScreen";
@@ -19,9 +20,13 @@ export default function RootLayout() {
   const [splashDone, setSplashDone] = useState(false);
   const hideSplash = useCallback(() => setSplashDone(true), []);
 
-  // Saved bookings and the session are read synchronously by the shared stores, so load them before the first screen.
+  // The saved sign-in token is read synchronously by the stores, so load it before the first screen; then ask the
+  // website who it belongs to, so signed-in screens don't flash "Log in" first. A slow connection waits at most a few
+  // seconds: the answer still arrives later and the screens update.
   useEffect(() => {
-    void prepareStorage().then(() => setStorageReady(true));
+    void prepareStorage()
+      .then(() => Promise.race([refreshAccount(), new Promise((r) => setTimeout(r, 4000))]))
+      .then(() => setStorageReady(true));
   }, []);
 
   if (!fontsReady || !storageReady) {

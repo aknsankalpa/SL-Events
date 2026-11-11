@@ -768,15 +768,16 @@ export const promoCodes: PromoCode[] = [
 
 /* ---------- Dashboard ---------- */
 
-/**
- * "Today" for the mock dashboard. The mock sales series ends on this day, so days-left and the calendar
- * are computed against it instead of the real clock (which would also cause server/client mismatches).
- */
-export const REFERENCE_DATE = "2026-10-13";
+/** Today's date in Korea ("2026-11-12"), where every event takes place: the calendar's "today" and the days-left counts. */
+export function todayKst(now = Date.now()): string {
+  return new Date(now + 9 * 3_600_000).toISOString().slice(0, 10);
+}
 
+/** Whole days from today (in Korea) to an event's date: 0 today, 1 tomorrow, negative once it has passed. */
 export function daysUntil(iso: string): number {
   const day = (v: string) => Date.parse(v.slice(0, 10));
-  return Math.round((day(iso) - day(REFERENCE_DATE)) / 86_400_000);
+  // The event's own date as written ("2026-11-14T18:00:00+09:00" is the 14th in Korea).
+  return Math.round((day(iso) - day(todayKst())) / 86_400_000);
 }
 
 export const dashboardStats = {
