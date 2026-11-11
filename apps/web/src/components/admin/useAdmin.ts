@@ -241,3 +241,58 @@ export function useAdminCounts() {
     payments,
   };
 }
+
+/* ---------- platform figures (dashboard and reports), from the server ---------- */
+
+export type PlatformFigures = {
+  totals: {
+    ticketsSold: number;
+    revenue: number;
+    tickets30: number;
+    revenue30: number;
+    ticketsChangePct: number;
+    revenueChangePct: number;
+    users: number;
+    newUsers30: number;
+    paymentsWaiting: number;
+    paymentsWaitingAmount: number;
+    awaitingPayment: number;
+    eventsLive: number;
+    eventsInReview: number;
+    applicationsOpen: number;
+    organizers: number;
+  };
+  ticketsPerDay: { date: string; label: string; value: number }[];
+  ticketsPerWeek: { label: string; tickets: number; revenue: number }[];
+  events: { id: string; title: string; organizer: string; status: string; sold: number; revenue: number; checkedIn: number }[];
+  organizers: { name: string; events: number; live: number; sold: number; revenue: number }[];
+};
+
+let figures: PlatformFigures | null = null;
+const figureListeners = new Set<() => void>();
+
+async function loadFigures() {
+  try {
+    const res = await fetch("/api/admin/figures", { credentials: "same-origin", cache: "no-store" });
+    if (res.ok) figures = (await res.json()) as PlatformFigures;
+  } catch {
+    /* keep what is shown */
+  }
+  figureListeners.forEach((l) => l());
+}
+
+/** Real platform totals: tickets, money, people, events. Null until loaded. */
+export function useFigures(): PlatformFigures | null {
+  const value = useSyncExternalStore(
+    (l) => {
+      figureListeners.add(l);
+      return () => figureListeners.delete(l);
+    },
+    () => figures,
+    () => null,
+  );
+  useEffect(() => {
+    void loadFigures();
+  }, []);
+  return value;
+}

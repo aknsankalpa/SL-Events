@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Building2, CalendarDays, Landmark, LayoutGrid, LogOut, Megaphone, Menu, ScrollText, Server, Settings, Users, BarChart3, X, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { auth, useSession } from "@/components/auth/useSession";
+import { configErrors } from "@/lib/adminStore";
 import { useAdminCounts } from "./useAdmin";
 
 type Item = { href: string; label: string; Icon: LucideIcon; badge?: "organizers" | "events" | "payments" };
@@ -99,6 +100,15 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
 /** The admin portal frame: a fixed sidebar on desktop and a slide-in drawer on phones. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // A settings or content change the server refused (the screen goes back to what is saved).
+  const [configError, setConfigError] = useState<string>();
+  useEffect(() => {
+    const listener = (message: string) => setConfigError(message);
+    configErrors.add(listener);
+    return () => {
+      configErrors.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +137,17 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </button>
         </header>
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
-          <div className="mx-auto max-w-[96rem]">{children}</div>
+          <div className="mx-auto max-w-[96rem]">
+            {configError && (
+              <p role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-text">
+                {configError}
+                <button type="button" onClick={() => setConfigError(undefined)} className="text-xs font-bold text-amber hover:text-gold">
+                  Dismiss
+                </button>
+              </p>
+            )}
+            {children}
+          </div>
         </main>
       </div>
 

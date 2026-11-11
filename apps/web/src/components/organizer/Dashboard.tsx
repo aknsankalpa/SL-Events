@@ -4,14 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, CheckCheck, ChevronDown, Download, FileText, Grid2x2, Plus, Users } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
-import {
-  dailySales,
-  dashboardStats,
-  orgBookings,
-  reportOptions,
-  salesByTicket,
-  verifyQueue,
-} from "@/lib/organizer";
+import { reportOptions } from "@/lib/organizer";
+import { useDashboard } from "./dashboard/useDashboard";
 import { useOrganizer } from "./OrganizerContext";
 import { useSession } from "@/components/auth/useSession";
 import { EventCalendar } from "./dashboard/EventCalendar";
@@ -28,6 +22,12 @@ const periods = [
   { days: 30, label: "Last 30 days" },
 ];
 
+/** "3 h" since a moment: how long a payment proof has been waiting. */
+function waitedFor(iso: string) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  return mins < 60 ? `${mins} min` : mins < 2880 ? `${Math.round(mins / 60)} h` : `${Math.round(mins / 1440)} days`;
+}
+
 const reportIcons = { sales: FileText, bookings: FileText, attendees: Users, verification: CheckCheck } as const;
 
 export function Dashboard() {
@@ -36,11 +36,14 @@ export function Dashboard() {
   const [days, setDays] = useState(14);
   const [eventFilter, setEventFilter] = useState("all");
 
-  const series = useMemo(() => dailySales.slice(-days), [days]);
+  // Real figures from the server: paid tickets per day, sales per ticket type, payments waiting.
+  const dash = useDashboard();
+  const series = useMemo(() => dash.dailySales.slice(-days), [dash.dailySales, days]);
   const shownEvents = events.filter((e) => eventFilter === "all" || e.id === eventFilter);
-  const byTicket = salesByTicket.filter((t) => eventFilter === "all" || t.event === eventFilter);
+  const byTicket = dash.salesByTicket.filter((t) => eventFilter === "all" || t.event === eventFilter);
   const periodLabel = periods.find((p) => p.days === days)!.label.toLowerCase();
-  const oldest = verifyQueue[0]?.waited.replace(" ago", "");
+  const since = dash.waitingQueue[0]?.sinceIso;
+  const oldest = since ? waitedFor(since) : undefined;
 
   return (
     // On desktop the dashboard is exactly one screen tall (the page never scrolls) and the long lists scroll inside
@@ -56,7 +59,7 @@ export function Dashboard() {
               Welcome back, {(user?.name ?? "").split(" ")[0]}
             </h1>
             <p className="mt-1 text-[13px] text-muted">
-              <span className="font-bold text-amber">{org.name}</span> · {dashboardStats.soldThisWeek} tickets sold this week
+              <span className="font-bold text-amber">{org.name}</span> · {dash.stats.soldThisWeek} tickets sold this week
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -108,7 +111,11 @@ export function Dashboard() {
           desktop columns. Upcoming events come first on phones, straight after the numbers. */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_23rem]">
         <div className="contents lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-4">
-          <SalesChart series={series} avgPrice={dashboardStats.avgTicketPrice} periodLabel={periodLabel} />
+          {series.length > 0 ? (
+            <SalesChart series={series} avgPrice={dash.stats.avgTicketPrice} periodLabel={periodLabel} />
+          ) : (
+            <p className="flex min-h-40 items-center justify-center rounded-2xl border border-line bg-surface text-sm text-muted">Loading sales…</p>
+          )}
           <ActivityTabs events={shownEvents} slices={byTicket.map((t) => ({ label: t.label, sold: t.sold }))} />
         </div>
 
@@ -153,6 +160,7 @@ function SelectPill({
 
 function ReportMenu({ periodLabel }: { periodLabel: string }) {
   const { events } = useOrganizer();
+  const dash = useDashboard();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -177,18 +185,18 @@ function ReportMenu({ periodLabel }: { periodLabel: string }) {
       ]);
     } else if (id === "bookings") {
       downloadCsv("all-bookings.csv", [
-        ["Booking", "Buyer", "Email", "Tickets", "Amount (KRW)", "Status", "Booked"],
-        ...orgBookings.map((b) => [b.id, b.buyer, b.email, b.tickets, b.amount, b.status, b.booked]),
+        ["Booking", "Event", "Buyer", "Email", "Tickets", "Amount (KRW)", "Status", "Booked"],
+        ...dash.bookings.map((b) => [b.id, b.event, b.buyer, b.email, b.tickets, b.amount, b.status, b.booked]),
       ]);
     } else if (id === "attendees") {
       downloadCsv("attendees.csv", [
-        ["Ticket holder", "Ticket", "Booking"],
-        ...orgBookings.flatMap((b) => b.holders.map((h) => [h.name, h.ticket, b.id])),
+        ["Ticket holder", "Ticket", "Code", "Booking", "Event"],
+        ...dash.bookings.flatMap((b) => b.holders.map((h) => [h.name, h.ticket, h.code, b.id, b.event])),
       ]);
     } else {
       downloadCsv("payment-verification-log.csv", [
         ["Booking", "Buyer", "Amount (KRW)", "Waiting"],
-        ...verifyQueue.map((q) => [q.booking, q.buyer, q.amount, q.waited]),
+        ...dash.waitingQueue.map((q) => [q.booking, q.buyer, q.amount, q.sinceIso ? waitedFor(q.sinceIso) : ""]),
       ]);
     }
     setOpen(false);

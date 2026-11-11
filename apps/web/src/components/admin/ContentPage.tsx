@@ -6,7 +6,7 @@ import { ExternalLink, Mail, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Toggle } from "@/components/ui/Toggle";
-import { ADMIN, defaultTemplates, notificationTexts, sampleValues, templateTags, websitePages } from "@/lib/admin";
+import { defaultTemplates, notificationTexts, sampleValues, templateTags, websitePages } from "@/lib/admin";
 import { logAudit, updateConfig, type AdminConfig } from "@/lib/adminStore";
 import { faqs } from "@/lib/content";
 import { AdminHeader, Panel, Tabs, Toast } from "./ui";
@@ -247,7 +247,7 @@ export function ContentPage() {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button size="sm" variant="outline" onClick={() => say(`Test email sent to ${ADMIN.email}.`)}>
+              <Button size="sm" variant="outline" disabled title="Emails aren't sent yet">
                 <Send size={14} aria-hidden /> Send test to me
               </Button>
               <Button size="sm" variant="ghost" onClick={resetTemplate} disabled={!stored}>

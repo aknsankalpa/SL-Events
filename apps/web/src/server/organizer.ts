@@ -248,8 +248,33 @@ async function toOrganizerEvent(e: EventRow, f: { sold: number; capacity: number
     ...f,
     status: e.status,
     statusNote: e.statusNote ?? undefined,
+    history: await historyOf(e),
     draft,
   };
+}
+
+/** The event's story from its own dates and SL Events' recorded decisions about it, newest first. */
+async function historyOf(e: EventRow) {
+  const stamp = (d: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(d);
+  const decisions = await db
+    .select({ action: s.auditLog.action, at: s.auditLog.at })
+    .from(s.auditLog)
+    .where(and(eq(s.auditLog.targetType, "event"), eq(s.auditLog.targetId, String(e.id))))
+    .orderBy(desc(s.auditLog.at))
+    .limit(20);
+  const items: { label: string; meta: string; at: number }[] = [
+    // Events added before the website existed carry the import date; they can't have been created after their review.
+    ...(() => {
+      const created = e.submittedAt && e.submittedAt < e.createdAt ? e.submittedAt : e.createdAt;
+      return [{ label: "Event created", meta: stamp(created), at: created.getTime() - 1 }];
+    })(),
+    ...(e.submittedAt ? [{ label: "Sent to SL Events for review", meta: stamp(e.submittedAt), at: e.submittedAt.getTime() }] : []),
+    ...decisions.map((d) => ({ label: d.action.replace(` ${e.title}`, ""), meta: `SL Events · ${stamp(d.at)}`, at: d.at.getTime() })),
+    ...(e.cancelledAt ? [{ label: "Event cancelled", meta: stamp(e.cancelledAt), at: e.cancelledAt.getTime() }] : []),
+  ];
+  // Events published before the website kept decisions still show when they went live.
+  if (e.publishedAt && !decisions.some((d) => /published/i.test(d.action))) items.push({ label: "Published", meta: stamp(e.publishedAt), at: e.publishedAt.getTime() });
+  return items.sort((a, b) => b.at - a.at).map(({ label, meta }) => ({ label, meta }));
 }
 
 /** Every event of the organizer, the most recently changed first. */

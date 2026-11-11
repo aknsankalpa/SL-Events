@@ -1,13 +1,10 @@
+import { defaultConfig, normalizeConfig, type AdminConfig } from "./siteConfig";
 import {
-  defaultBanner,
-  defaultSettings,
-  defaultTemplates,
   type AdminEventStatus,
   type AdminUser,
   type AppStatus,
   type AuditEntry,
   type AuditType,
-  type PlatformSettings,
   type Permissions,
   type Role,
 } from "./admin";
@@ -52,54 +49,74 @@ export const updateAdmin = (change: (s: AdminState) => AdminState) => adminStore
 
 /* ------------------------------------ configuration ------------------------------------ */
 
-export type Banner = typeof defaultBanner;
-export type Maintenance = { on: boolean; window: string; message: string };
+export { defaultConfig, templateFor, type AdminConfig, type Banner, type Maintenance } from "./siteConfig";
 
-export type AdminConfig = {
-  settings: PlatformSettings;
-  /** Edited email templates by id; anything not edited uses the default. */
-  templates: Record<string, { subject: string; body: string }>;
-  banner: Banner;
-  maintenance: Maintenance;
-  /** True once an admin has published the banner; until then the public site shows none. */
-  bannerPublished: boolean;
-  /** Edited notification texts by id. */
-  notifications: Record<string, string>;
-  /** Edited FAQ entries by their position in the public list. */
-  faq: Record<string, { q: string; a: string }>;
+type ConfigState = { config: AdminConfig; loaded: boolean };
+let configState: ConfigState = { config: defaultConfig, loaded: false };
+const SERVER_CONFIG: ConfigState = { config: defaultConfig, loaded: false };
+const configListeners = new Set<() => void>();
+let configLoading: Promise<void> | null = null;
+/** Called with the reason when the server refuses a change (the screen then shows what is really saved). */
+export const configErrors = new Set<(message: string) => void>();
+
+function setConfig(next: ConfigState) {
+  configState = next;
+  configListeners.forEach((l) => l());
+}
+
+/** Loads the site configuration from the server (once, unless asked again). */
+export function loadConfig(force = false): Promise<void> {
+  if (configState.loaded && !force) return Promise.resolve();
+  configLoading ??= fetch("/api/site/config", { cache: "no-store" })
+    .then(async (res) => {
+      const data = (await res.json().catch(() => ({}))) as { config?: unknown };
+      if (res.ok) setConfig({ config: normalizeConfig(data.config), loaded: true });
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      configLoading = null;
+    });
+  return configLoading;
+}
+
+/**
+ * The site configuration as the server has it. Works with useSyncExternalStore; subscribing starts the first load, so
+ * the public banner and notices appear for every visitor once an admin publishes them.
+ */
+export const configStore = {
+  subscribe(listener: () => void) {
+    configListeners.add(listener);
+    void loadConfig();
+    return () => configListeners.delete(listener);
+  },
+  getSnapshot: () => configState.config,
+  getServerSnapshot: () => SERVER_CONFIG.config,
 };
 
-const defaultMaintenance: Maintenance = { on: false, window: "Tue, 27 Oct · 2:00–3:00 AM KST", message: "We're updating SL Events. Back by 3:00 AM." };
-
-export const defaultConfig: AdminConfig = { settings: defaultSettings, templates: {}, banner: defaultBanner, maintenance: defaultMaintenance, bannerPublished: false, notifications: {}, faq: {} };
-
-export const configStore = createPersistedStore<AdminConfig>("sl-events:admin-config:v1", defaultConfig, (stored) => {
-  const s = isRecord(stored) ? stored : {};
-  const settings = isRecord(s.settings) ? (s.settings as Partial<PlatformSettings>) : {};
-  return {
-    settings: {
-      ...defaultSettings,
-      ...settings,
-      ticketTypes: { ...defaultSettings.ticketTypes, ...(isRecord(settings.ticketTypes) ? settings.ticketTypes : {}) },
-      languages: { ...defaultSettings.languages, ...(isRecord(settings.languages) ? settings.languages : {}) },
-      categories: Array.isArray(settings.categories) ? settings.categories.filter((c): c is string => typeof c === "string") : defaultSettings.categories,
-      colours: Array.isArray(settings.colours) ? settings.colours.filter((c): c is string => typeof c === "string") : defaultSettings.colours,
-    },
-    templates: isRecord(s.templates) ? (s.templates as AdminConfig["templates"]) : {},
-    banner: { ...defaultBanner, ...(isRecord(s.banner) ? s.banner : {}) },
-    maintenance: { ...defaultMaintenance, ...(isRecord(s.maintenance) ? s.maintenance : {}) },
-    bannerPublished: s.bannerPublished === true,
-    notifications: isRecord(s.notifications) ? (s.notifications as AdminConfig["notifications"]) : {},
-    faq: isRecord(s.faq) ? (s.faq as AdminConfig["faq"]) : {},
-  };
-});
-
-export const updateConfig = (change: (c: AdminConfig) => AdminConfig) => configStore.update(change);
-
-export const templateFor = (config: AdminConfig, id: string) => {
-  const base = defaultTemplates.find((t) => t.id === id)!;
-  return { ...base, ...config.templates[id] };
-};
+/**
+ * Changes the configuration. The screen updates straight away and the server saves it (admins only, recorded in the
+ * audit log); if the server refuses, the saved version comes back and the reason goes to `configErrors`.
+ */
+export function updateConfig(change: (c: AdminConfig) => AdminConfig) {
+  const next = change(configState.config);
+  setConfig({ config: next, loaded: true });
+  void fetch("/api/admin/site-config", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ config: next }),
+    credentials: "same-origin",
+  })
+    .then(async (res) => {
+      if (res.ok) return;
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      configErrors.forEach((l) => l(data.error ?? "Couldn't save. Your change wasn't kept."));
+      await loadConfig(true);
+    })
+    .catch(async () => {
+      configErrors.forEach((l) => l("We couldn't reach SL Events. Your change wasn't saved."));
+      await loadConfig(true);
+    });
+}
 
 /* ------------------------------------- audit log ------------------------------------- */
 

@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Toggle } from "@/components/ui/Toggle";
 import { Badge } from "@/components/ui/StatusBadge";
-import { ADMIN, backups, connected, services } from "@/lib/admin";
+import { backups, connected, services } from "@/lib/admin";
 import { logAudit, updateConfig, type Maintenance } from "@/lib/adminStore";
-import { downloadCsv } from "@/components/organizer/ui";
 import { AdminHeader, Dialog, Panel, Toast } from "./ui";
 import { useAdminConfig } from "./useAdmin";
 
@@ -56,16 +55,13 @@ export function SystemPage() {
   }
 
   function exportData(kind: "Excel" | "CSV" | "ZIP") {
-    if (kind === "CSV") {
-      downloadCsv("bookings-sample.csv", [
-        ["Booking", "Customer", "Event", "Tickets", "Amount", "Status"],
-        ["SL-41740", "Malith Ekanayake", "Sri Lankan Music Night", 2, 60000, "Paid"],
-        ["SL-41742", "Kasun Perera", "Sri Lankan Music Night", 2, 60000, "Waiting for payment"],
-      ]);
-    }
-    // TODO: the API builds the real export (this only downloads a small sample) and emails a link for the big ones.
-    logAudit({ type: "export", action: `Exported all bookings (${kind})`, item: "report: bookings" });
-    say(kind === "CSV" ? "Sample downloaded. The export is recorded in the audit log." : `${kind} export requested. We'll email a link to ${ADMIN.email}.`);
+    if (kind === "ZIP") return say("Full backups as a ZIP aren't available yet. Download the bookings as a CSV file instead.");
+    // The server builds the file from every booking and records the export in the audit log.
+    const link = document.createElement("a");
+    link.href = "/api/admin/export/bookings";
+    link.download = "";
+    link.click();
+    say("Downloading all bookings. The CSV file opens in Excel, and the export is recorded in the audit log.");
   }
 
   function sendSupport() {

@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/StatusBadge";
 import type { Booking } from "@/lib/bookings";
 import { bookingActions } from "@/components/booking/useBookings";
-import { paymentAccount, type EventItem } from "@/lib/data";
+import type { EventItem } from "@/lib/data";
+import { usePaymentAccount } from "./usePaymentAccount";
 import { formatKrw } from "@/lib/format";
 
 function useCountdown(deadlineIso?: string) {
@@ -63,6 +64,7 @@ export function PaymentInstructions({ booking, event }: { booking: Booking; even
   const [cancelError, setCancelError] = useState<string>();
   const left = useCountdown(booking.payByIso);
   const amount = formatKrw(booking.total);
+  const paymentAccount = usePaymentAccount();
 
   const rows = [
     { label: "Bank", value: paymentAccount.bank },

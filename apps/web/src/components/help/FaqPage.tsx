@@ -5,11 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { Card } from "@/components/ui/Card";
-import { faqs, helpCategories, type FaqCategory } from "@/lib/content";
+import { helpCategories, type FaqCategory } from "@/lib/content";
+import { useFaqs } from "./useFaqs";
 import { FaqAccordion } from "./FaqAccordion";
 
 /** Every question, filterable by topic and searchable. A topic can be linked to with ?cat=booking. */
 export function FaqPage() {
+  const faqs = useFaqs();
   const params = useSearchParams();
   const fromLink = params.get("cat");
   const [cat, setCat] = useState<FaqCategory | "all">(helpCategories.some((c) => c.id === fromLink) ? (fromLink as FaqCategory) : "all");

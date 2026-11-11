@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/StatusBadge";
 import { formatKrw } from "@/lib/format";
-import { orgBookings, orgBookingStatus } from "@/lib/organizer";
+import { orgBookingStatus } from "@/lib/organizer";
+import { useDashboard } from "./useDashboard";
 
 const initials = (name: string) =>
   name
@@ -11,7 +12,7 @@ const initials = (name: string) =>
 
 /** The latest bookings as a table. The surrounding panel provides the card, title and scrolling. */
 export function RecentOrders() {
-  const rows = orgBookings.slice(0, 8);
+  const rows = useDashboard().bookings.slice(0, 8);
 
   return (
     <table className="w-full min-w-0 text-left text-[13px]">

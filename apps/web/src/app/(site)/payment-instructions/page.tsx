@@ -4,7 +4,8 @@ import { Camera, CheckCircle2, Clock, Landmark, QrCode, Ticket, Upload } from "l
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { paymentAccount } from "@/lib/data";
+import { paymentAccountOf } from "@/lib/siteConfig";
+import { getSiteConfig } from "@/server/site";
 
 export const metadata: Metadata = {
   title: "Payment instructions",
@@ -30,7 +31,9 @@ const goodToKnow = [
   { Icon: CheckCircle2, text: "A friend can pay for you. Put the sender's name on the proof so we can match it to your booking." },
 ];
 
-export default function PaymentInstructionsPage() {
+export default async function PaymentInstructionsPage() {
+  // The account the admins set (cached, refreshed as soon as they change it).
+  const paymentAccount = paymentAccountOf(await getSiteConfig());
   return (
     <>
       <PageHeader title="Payment instructions" subtitle="Tickets are paid by bank transfer. Here's how it works, start to finish." />

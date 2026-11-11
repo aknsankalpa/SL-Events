@@ -6,10 +6,10 @@ import { useMemo, useState } from "react";
 import { Building2, CalendarDays, CheckCheck, CheckCircle2, Flag, Hourglass, Landmark, Search, Settings, ShieldAlert, Ticket, TrendingUp, UserPlus, Users, Wallet } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { dashboardStats, platformActivity, services, ticketsPerDay, topEvents } from "@/lib/admin";
+import { services } from "@/lib/admin";
 import { formatKrw } from "@/lib/format";
 import { AdminHeader, BarChart, Meter, Panel } from "./ui";
-import { useAdminCounts, useAdminEvents, useApplications } from "./useAdmin";
+import { useAdminCounts, useAdminEvents, useApplications, useAudit, useFigures } from "./useAdmin";
 
 const periods = [
   { days: 7, label: "Last 7 days" },
@@ -35,7 +35,18 @@ export function DashboardPage() {
   const { events, dismissed } = useAdminEvents();
   const { applications } = useApplications();
 
-  const series = useMemo(() => ticketsPerDay.slice(-days).map((value, i, a) => ({ value, label: dayLabel(a.length - 1 - i) })), [days]);
+  // Real figures: paid tickets per day, totals, the audit log as the activity feed.
+  const figures = useFigures();
+  const audit = useAudit();
+  const series = useMemo(() => (figures?.ticketsPerDay ?? []).slice(-days).map((d) => ({ value: d.value, label: d.label })), [figures, days]);
+  const revenueOf = new Map((figures?.events ?? []).map((e) => [e.id, e.revenue]));
+  const topEvents = [...events]
+    .sort((a, b) => b.sold - a.sold)
+    .slice(0, 5)
+    .map((e) => ({ name: e.title, organizer: e.organizer, sold: e.sold, capacity: e.capacity, sales: revenueOf.get(e.id) ?? 0 }));
+  const iconFor = (type: string, item: string): keyof typeof activityIcons =>
+    type === "payment" ? "payments" : type === "permission" || type === "account" ? "users" : type === "decision" ? (item.startsWith("organizer") ? "organizer" : "event") : "settings";
+  const platformActivity = audit.slice(0, 6).map((a) => ({ icon: iconFor(a.type, a.item), text: a.action, sub: `${a.who} · ${a.role}`, time: new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }) }));
   const slow = services.filter((s) => s.state === "slow");
   const waitingOrgs = applications.filter((a) => a.status === "new" || a.status === "info_asked");
   const review = events.filter((e) => e.status === "review");
@@ -76,14 +87,14 @@ export function DashboardPage() {
     },
   ].filter(Boolean) as { Icon: typeof Landmark; title: string; sub: string; href: string; cta: string; tone: string }[];
 
-  const s = dashboardStats;
+  const t = figures?.totals;
   const cards = [
-    { label: "Total users", value: s.totalUsers.toLocaleString("en-US"), Icon: Users, note: `+${s.newUsers} this month`, up: true },
-    { label: "Active organizers", value: String(s.activeOrganizers), Icon: Building2, note: `${waitingOrgs.length} waiting for approval` },
-    { label: "Upcoming events", value: String(s.upcomingEvents), Icon: CalendarDays, note: `${review.length} waiting for review` },
-    { label: "Tickets sold", value: s.ticketsSold.toLocaleString("en-US"), Icon: Ticket, note: "last 30 days", up: true },
-    { label: "Payments to confirm", value: String(counts.payments), Icon: Hourglass, note: `Oldest waiting ${s.oldestWaiting}`, warn: true },
-    { label: "Ticket sales", value: formatKrw(s.ticketSales), Icon: Wallet, note: "last 30 days", up: true },
+    { label: "Total users", value: (t?.users ?? 0).toLocaleString("en-US"), Icon: Users, note: `+${t?.newUsers30 ?? 0} in the last 30 days`, up: (t?.newUsers30 ?? 0) > 0 },
+    { label: "Active organizers", value: String(t?.organizers ?? 0), Icon: Building2, note: `${waitingOrgs.length} waiting for approval` },
+    { label: "Events on sale", value: String(t?.eventsLive ?? 0), Icon: CalendarDays, note: `${review.length} waiting for review` },
+    { label: "Tickets sold", value: (t?.tickets30 ?? 0).toLocaleString("en-US"), Icon: Ticket, note: "paid, last 30 days", up: (t?.ticketsChangePct ?? 0) > 0 },
+    { label: "Payments to confirm", value: String(counts.payments), Icon: Hourglass, note: t?.paymentsWaitingAmount ? `${formatKrw(t.paymentsWaitingAmount)} waiting` : "Nothing waiting", warn: counts.payments > 0 },
+    { label: "Ticket sales", value: formatKrw(t?.revenue30 ?? 0), Icon: Wallet, note: "paid, last 30 days", up: (t?.revenueChangePct ?? 0) > 0 },
   ];
 
   return (
@@ -245,7 +256,7 @@ export function DashboardPage() {
             {platformActivity.map((a) => {
               const Icon = activityIcons[a.icon];
               return (
-                <li key={a.text} className="flex items-start gap-3 py-3">
+                <li key={`${a.text}-${a.time}`} className="flex items-start gap-3 py-3">
                   <Icon size={14} aria-hidden className="mt-1 shrink-0 text-gold" />
                   <span className="min-w-0 flex-1 leading-tight">
                     <span className="block text-[13px] text-text">{a.text}</span>
@@ -260,10 +271,4 @@ export function DashboardPage() {
       </div>
     </>
   );
-}
-
-/** "Oct 15" style label for a day this many days before today (the portal's mock "today" is 19 Oct). */
-function dayLabel(daysAgo: number) {
-  const d = new Date(Date.UTC(2026, 9, 19 - daysAgo));
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }

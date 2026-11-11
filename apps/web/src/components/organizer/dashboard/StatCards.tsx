@@ -1,6 +1,6 @@
 import { ArrowUpRight, Clock3, Ticket, Wallet, LayoutGrid, type LucideIcon } from "lucide-react";
 import { formatKrw } from "@/lib/format";
-import { dashboardStats } from "@/lib/organizer";
+import { useDashboard } from "./useDashboard";
 
 type Tone = "gold" | "green" | "red" | "cream";
 
@@ -21,7 +21,7 @@ type Card = {
 };
 
 export function StatCards({ pending }: { pending: number }) {
-  const s = dashboardStats;
+  const s = useDashboard().stats;
   const cards: Card[] = [
     {
       label: "Tickets sold",

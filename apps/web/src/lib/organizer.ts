@@ -126,6 +126,8 @@ export type OrganizerEvent = {
   status: OrgEventStatus;
   /** SL Events' note when it asked for changes, unpublished or cancelled the event. */
   statusNote?: string;
+  /** What happened to the event, newest first: created, sent for review, SL Events' decisions, published. */
+  history?: { label: string; meta: string }[];
   /** Everything the organizer entered, for events created in the wizard. Drives preview and re-editing. */
   draft?: EventDraft;
 };

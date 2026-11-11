@@ -5,7 +5,8 @@ import { Suspense, useState } from "react";
 import { ArrowRight, Landmark, QrCode, Search, Store, User, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { faqTotal, faqs, helpCategories } from "@/lib/content";
+import { faqTotal, helpCategories } from "@/lib/content";
+import { useFaqs } from "./useFaqs";
 import { ContactChannels } from "./ContactChannels";
 import { ContactForm } from "./ContactForm";
 import { FaqAccordion } from "./FaqAccordion";
@@ -22,6 +23,7 @@ const PREVIEW = 6;
 
 /** The help centre: search the questions, jump to a topic, or write to us. The full FAQ and contact pages go further. */
 export function HelpCenter() {
+  const faqs = useFaqs();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const matches = faqs.filter((f) => !q || `${f.q} ${f.a}`.toLowerCase().includes(q));

@@ -23,7 +23,7 @@ import { Field } from "@/components/ui/Field";
 import { RichTextEditor } from "@/components/ui/RichTextEditorLazy";
 import { Badge } from "@/components/ui/StatusBadge";
 import { fileToCoverDataUrl } from "@/lib/image";
-import { changeHistory, eventCategories, eventStatusLabel, eventStatusTone, type EventDraft, type OrganizerEvent } from "@/lib/organizer";
+import { eventCategories, eventStatusLabel, eventStatusTone, type EventDraft, type OrganizerEvent } from "@/lib/organizer";
 import { EventDraftProvider } from "./wizard/EventDraft";
 import { SeatMapEditor } from "./wizard/SeatMapEditor";
 import { useOrganizer } from "./OrganizerContext";
@@ -203,7 +203,7 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
 
   const history = [
     ...(changed.starts ? [{ label: `Start time ${fmtTime(baseline.starts)} → ${fmtTime(form.starts)}`, meta: "Not saved yet", pending: true }] : []),
-    ...changeHistory.map((h) => ({ ...h, pending: false })),
+    ...(event.history ?? []).map((h) => ({ ...h, pending: false })),
   ];
 
   async function save() {
@@ -495,8 +495,8 @@ function EventEditorForm({ id, event }: { id: string; event: OrganizerEvent }) {
           <Panel className="p-5">
             <h2 className="mb-4 text-base font-bold text-text">Change history</h2>
             <ol className="space-y-4">
-              {history.map((h) => (
-                <li key={h.label} className="flex gap-3">
+              {history.map((h, i) => (
+                <li key={`${h.label}-${i}`} className="flex gap-3">
                   <span aria-hidden className={`mt-1.5 size-2 shrink-0 rounded-full ${h.pending ? "bg-amber" : "bg-dim"}`} />
                   <span className="leading-tight">
                     <span className="block text-[13px] font-bold text-text">{h.label}</span>

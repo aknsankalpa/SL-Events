@@ -13,7 +13,8 @@ import { useSession } from "@/components/auth/useSession";
 import { useOnline } from "@/components/layout/OfflineBanner";
 import { refreshTakenSeats, useTakenSeats } from "@/components/seats/useTakenSeats";
 import { bookingActions } from "@/components/booking/useBookings";
-import { currentUser, paymentAccount, ticketsLeft, type EventItem } from "@/lib/data";
+import { currentUser, ticketsLeft, type EventItem } from "@/lib/data";
+import { usePaymentAccount } from "./usePaymentAccount";
 import { formatKrw } from "@/lib/format";
 import { MAX_PER_BOOKING } from "@/lib/bookings";
 import { prepareSeatBooking, type ChartSeat } from "@/lib/seating";
@@ -41,6 +42,7 @@ export function BookingSummaryForm({ event }: { event: EventItem }) {
   const params = useSearchParams();
   const { user } = useSession();
   const online = useOnline();
+  const paymentAccount = usePaymentAccount();
   const fullName = user?.name ?? currentUser.fullName;
   const email = user?.email ?? currentUser.email;
   const chart = event.seatChart;

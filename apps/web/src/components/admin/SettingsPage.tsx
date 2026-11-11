@@ -246,6 +246,7 @@ export function SettingsPage() {
     fees: (
       <>
         {heading("Fees", "What SL Events earns on every paid ticket. Changes apply to new bookings only.")}
+        <p className="mb-4 rounded-lg border border-amber/40 bg-amber/10 px-3 py-2 text-[11px] leading-relaxed text-text">Not applied yet: bookings currently carry no fee, whatever is saved here.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Percentage of the ticket price" type="number" min={0} max={30} step={0.5} value={s.feePercent} error={errors.feePercent} onChange={(e) => set({ feePercent: Number(e.target.value) })} />
           <Field label="Extra fee per ticket (₩)" type="number" min={0} max={5000} step={100} value={s.feeFixed} error={errors.feeFixed} onChange={(e) => set({ feeFixed: Number(e.target.value) })} />
@@ -269,6 +270,7 @@ export function SettingsPage() {
     limits: (
       <>
         {heading("Booking limits", "How much one customer can book and how long they have to pay.")}
+        <p className="mb-4 rounded-lg border border-amber/40 bg-amber/10 px-3 py-2 text-[11px] leading-relaxed text-text">Not applied yet: bookings currently allow up to 10 tickets and hold them for 24 hours, whatever is saved here.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field className="sm:col-span-2" label="Most tickets in one booking" type="number" min={1} max={20} value={s.maxTickets} error={errors.maxTickets} onChange={(e) => set({ maxTickets: Number(e.target.value) })} />
           <div>
