@@ -1,0 +1,1 @@
+ALTER TABLE `organizers` ADD `city` varchar(60);

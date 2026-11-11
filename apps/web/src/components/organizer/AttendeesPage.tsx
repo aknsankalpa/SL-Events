@@ -57,6 +57,8 @@ export function AttendeesPage() {
         cancelled: `${r.holder}'s booking was cancelled.`,
         wrong_event: "That ticket is for a different event.",
         not_found: "That ticket code doesn't exist.",
+        too_early: "Check-in hasn't opened yet for this event.",
+        too_late: "Entry has closed for this event (late cut-off).",
       };
       setMessage({ ok: r.outcome === "admitted", text: r.outcome ? text[r.outcome]! : (r.error ?? "Couldn't check in.") });
     } catch {

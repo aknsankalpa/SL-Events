@@ -5,14 +5,52 @@ import {
   seedUsers,
   type AdminEvent,
   type AdminUser,
+  type AuditEntry,
   type AppStatus,
   type OrganizerApp,
 } from "@/lib/admin";
-import { adminStore, auditStore, configStore } from "@/lib/adminStore";
+import { adminStore, auditWritten, configStore } from "@/lib/adminStore";
 
 export const useAdminState = () => useSyncExternalStore(adminStore.subscribe, adminStore.getSnapshot, adminStore.getServerSnapshot);
 export const useAdminConfig = () => useSyncExternalStore(configStore.subscribe, configStore.getSnapshot, configStore.getServerSnapshot);
-export const useAudit = () => useSyncExternalStore(auditStore.subscribe, auditStore.getSnapshot, auditStore.getServerSnapshot);
+/* ---------- the audit log, from the server ---------- */
+
+const NO_ENTRIES: AuditEntry[] = [];
+let auditEntries: AuditEntry[] = NO_ENTRIES;
+const auditListeners = new Set<() => void>();
+let auditLoaded = false;
+
+async function loadAudit() {
+  try {
+    const res = await fetch("/api/admin/audit", { credentials: "same-origin", cache: "no-store" });
+    const data = (await res.json().catch(() => ({}))) as { entries?: AuditEntry[] };
+    if (res.ok) auditEntries = data.entries ?? [];
+  } catch {
+    /* keep what is shown */
+  }
+  auditLoaded = true;
+  auditListeners.forEach((l) => l());
+}
+auditWritten.add(() => {
+  if (auditListeners.size) void loadAudit();
+});
+
+/** The audit log, newest first. Loads when a page that shows it opens, and again after anything is recorded. */
+export function useAudit(): AuditEntry[] {
+  const list = useSyncExternalStore(
+    (l) => {
+      auditListeners.add(l);
+      return () => auditListeners.delete(l);
+    },
+    () => auditEntries,
+    () => NO_ENTRIES,
+  );
+  useEffect(() => {
+    void loadAudit();
+  }, []);
+  return list;
+}
+export const auditReady = () => auditLoaded;
 
 /* ---------- organizer applications and organizers, from the server ---------- */
 

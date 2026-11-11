@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ArrowLeft, Clock, KeyRound, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
-import { auth, devCodes } from "./useSession";
+import { auth, devCodes, useSession } from "./useSession";
 
 const steps = [
   { Icon: Mail, text: "We email you a 6-digit code" },
@@ -15,6 +15,8 @@ const steps = [
 ];
 
 export function ForgotPasswordForm() {
+  // A signed-in person changing their password gets their own email filled in.
+  const { user } = useSession();
   const router = useRouter();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -54,7 +56,17 @@ export function ForgotPasswordForm() {
       </p>
 
       <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">
-        <Field label="Email" name="email" type="email" autoComplete="email" placeholder="you@example.com" icon={<Mail />} error={error} />
+        <Field
+          key={user?.email ?? ""}
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          defaultValue={user?.email ?? ""}
+          icon={<Mail />}
+          error={error}
+        />
         <Button type="submit" size="lg" className="w-full" disabled={busy}>
           {busy ? "Sending…" : "Send reset code"}
         </Button>

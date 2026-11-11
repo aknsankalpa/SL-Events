@@ -34,7 +34,8 @@ const statusTone: Record<StaffStatus, "success" | "warning" | "danger"> = {
 };
 const statusLabel: Record<StaffStatus, string> = { active: "Active", invited: "Invite sent", suspended: "Suspended" };
 
-const looksLikeContact = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || /^\+?[\d\s-]{8,15}$/.test(v);
+/** Door staff log in with their email to scan tickets, so an email is needed. */
+const looksLikeContact = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export function StaffPanel({ staff, onAdd, onUpdate, onRemove, bare }: Props) {
   const [editing, setEditing] = useState<StaffMember | "new" | null>(null);
@@ -244,12 +245,12 @@ function StaffForm({
     e.preventDefault();
     const next: typeof errors = {};
     if (!name.trim()) next.name = "Enter their name.";
-    if (!looksLikeContact(contact.trim())) next.contact = "Enter an email address or a mobile number.";
+    if (!looksLikeContact(contact.trim())) next.contact = "Enter their email address. They log in with it to scan tickets.";
     if (!from || !until || from >= until) next.window = "Access must end after it starts.";
     setErrors(next);
     if (Object.keys(next).length) return;
 
-    // TODO: the API sends the invite and enforces the access window server-side.
+    // The server adds them (making an account for a new email) and holds them to the access window when they scan.
     onSave(
       {
         ...base,
@@ -270,11 +271,17 @@ function StaffForm({
     <form onSubmit={submit} noValidate className="space-y-4">
       <Field label="Full name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} autoComplete="off" />
       <Field
-        label="Email or mobile number"
+        label="Email"
+        type="email"
         value={contact}
         onChange={(e) => setContact(e.target.value)}
+        readOnly={!isNew}
         error={errors.contact}
-        hint={isNew ? "We send them a private invite link here." : undefined}
+        hint={
+          isNew
+            ? "If they're new to SL Events, an account is made for this email; they set a password with \"Forgot password\". Emails aren't sent yet, so tell them yourself."
+            : "Their login email. Remove them and add them again to use a different one."
+        }
         autoComplete="off"
       />
 

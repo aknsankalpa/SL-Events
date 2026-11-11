@@ -122,7 +122,9 @@ export function DetailsStep() {
             </div>
             <button
               type="button"
+              disabled={!profile}
               onClick={() =>
+                profile &&
                 patch({
                   organizerName: profile.orgName,
                   organizerEmail: profile.orgEmail,

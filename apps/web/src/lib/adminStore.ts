@@ -1,9 +1,7 @@
 import {
-  ADMIN,
   defaultBanner,
   defaultSettings,
   defaultTemplates,
-  seedAudit,
   type AdminEventStatus,
   type AdminUser,
   type AppStatus,
@@ -105,22 +103,21 @@ export const templateFor = (config: AdminConfig, id: string) => {
 
 /* ------------------------------------- audit log ------------------------------------- */
 
-export const auditStore = createPersistedStore<AuditEntry[]>("sl-events:admin-audit:v1", seedAudit, (stored) =>
-  Array.isArray(stored) ? (stored.filter(isRecord).filter((e) => typeof e.id === "string") as unknown as AuditEntry[]) : seedAudit,
-);
+/** Called after an entry is written, so an open audit page loads the log again. */
+export const auditWritten = new Set<() => void>();
 
-/** Records an admin decision. Entries are only ever added: there is no function here to change or remove one. */
+/**
+ * Records an admin action in the audit log on the server, in the signed-in admin's name. Entries are only ever added:
+ * nothing can change or remove one. (Decisions the server carries out, such as publishing an event, are recorded by
+ * the server itself.)
+ */
 export function logAudit(entry: { action: string; item: string; type: AuditType; detail?: AuditEntry["detail"] }) {
-  const record: AuditEntry = {
-    id: `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    at: new Date().toISOString(),
-    who: ADMIN.name,
-    initials: ADMIN.initials,
-    role: ADMIN.role,
-    action: entry.action,
-    item: entry.item,
-    type: entry.type,
-    detail: { device: "This browser", ...entry.detail },
-  };
-  auditStore.update((list) => [record, ...list]);
+  void fetch("/api/admin/audit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: entry.type, action: entry.action, item: entry.item, changes: entry.detail?.changes }),
+    credentials: "same-origin",
+  })
+    .then(() => auditWritten.forEach((l) => l()))
+    .catch(() => undefined);
 }

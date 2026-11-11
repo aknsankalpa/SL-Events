@@ -6,7 +6,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/StatusBadge";
 import { statsFor } from "@/lib/operations";
-import { attendees, daysUntil, eventStatusLabel } from "@/lib/organizer";
+import { daysUntil, eventStatusLabel, type Attendee } from "@/lib/organizer";
 import { useOrganizer } from "../OrganizerContext";
 import { downloadCsv, OrgPageHeader, Panel, TabbedPanel } from "../ui";
 import { ActivityPanel } from "./ActivityPanel";
@@ -43,7 +43,7 @@ export function OperationsPage({ id }: { id: string }) {
 function Operations({ id }: { id: string }) {
   const { events, setEventId } = useOrganizer();
   const event = events.find((e) => e.id === id)!;
-  const { ops, addStaff, updateStaff, removeStaff, saveSettings } = useEventOps(id);
+  const { ops, error, addStaff, updateStaff, removeStaff, saveSettings } = useEventOps(id);
 
   if (event.status === "draft") {
     return (
@@ -69,7 +69,8 @@ function Operations({ id }: { id: string }) {
     );
   }
 
-  const stats = statsFor(id, event.sold);
+  // Entry numbers come from the server: real tickets and real scans. Until they load, an empty set of figures.
+  const stats = ops.stats ?? statsFor(id, 0);
   const activeStaff = ops.staff.filter((s) => s.status === "active").length;
   const invited = ops.staff.filter((s) => s.status === "invited").length;
   const refused = Object.values(stats.rejected).reduce((n, v) => n + v, 0);
@@ -80,10 +81,13 @@ function Operations({ id }: { id: string }) {
     ? { tone: "success" as const, label: "Check-in live" }
     : { tone: "neutral" as const, label: days !== null && days > 0 ? `Opens in ${days} days` : eventStatusLabel[event.status] };
 
-  function exportCheckIns() {
-    downloadCsv(`${id}-check-ins.csv`, [
+  /** Downloads the ticket holders and their check-in state, fresh from the server. */
+  async function exportCheckIns() {
+    const res = await fetch(`/api/organizer/events/${encodeURIComponent(id)}/attendees`, { credentials: "same-origin", cache: "no-store" }).catch(() => null);
+    const data = res?.ok ? ((await res.json()) as { attendees: Attendee[] }) : { attendees: [] };
+    downloadCsv(`${event.title.replace(/[^\w-]+/g, "-")}-check-ins.csv`, [
       ["Ticket holder", "Ticket", "Code", "Booking", "Check-in"],
-      ...attendees.map((a) => [a.name, a.ticket, a.code, a.booking, a.state === "checked_in" ? "Checked in" : a.state === "cancelled" ? "Cancelled" : "Not yet"]),
+      ...data.attendees.map((a) => [a.name, a.ticket, a.code, a.booking, a.state === "checked_in" ? "Checked in" : a.state === "cancelled" ? "Cancelled" : "Not yet"]),
     ]);
   }
 
@@ -102,7 +106,7 @@ function Operations({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button size="sm" variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={exportCheckIns}>
+          <Button size="sm" variant="outline" className="border-line bg-surface text-text hover:bg-surface-2" onClick={() => void exportCheckIns()}>
             <Download size={15} aria-hidden /> Export
           </Button>
           <LinkButton size="sm" href="/organizer/scanner" onClick={() => setEventId(id)}>
@@ -110,6 +114,12 @@ function Operations({ id }: { id: string }) {
           </LinkButton>
         </div>
       </header>
+
+      {error && (
+        <p role="alert" className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-text">
+          {error}
+        </p>
+      )}
 
       <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <OpsStat

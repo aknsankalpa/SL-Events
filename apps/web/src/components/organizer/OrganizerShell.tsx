@@ -48,7 +48,7 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   const { pending, organizer } = useOrganizer();
   const { profile } = useOrganizerProfile();
   const { user } = useSession();
-  const fullName = user?.name ?? profile.fullName;
+  const fullName = user?.name ?? profile?.fullName ?? "";
   const profileActive = isActive(pathname, "/organizer/profile");
 
   return (
@@ -97,7 +97,7 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
           }`}
         >
           <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold/60 bg-surface-2 text-[13px] font-bold text-gold">
-            {profile.logoUrl ? (
+            {profile?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- organizer-uploaded data URL
               <img src={profile.logoUrl} alt="" className="size-full object-cover" />
             ) : (

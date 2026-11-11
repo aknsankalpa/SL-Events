@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Building2, CalendarDays, Landmark, LayoutGrid, LogOut, Megaphone, Menu, ScrollText, Server, Settings, Users, BarChart3, X, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { ADMIN } from "@/lib/admin";
+import { auth, useSession } from "@/components/auth/useSession";
 import { useAdminCounts } from "./useAdmin";
 
 type Item = { href: string; label: string; Icon: LucideIcon; badge?: "organizers" | "events" | "payments" };
@@ -28,6 +28,12 @@ const isActive = (pathname: string, href: string) => (href === "/admin" ? pathna
 function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useSession();
+  const initials = (user?.name ?? "")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
   const counts = useAdminCounts();
 
   return (
@@ -68,17 +74,19 @@ function SidebarContents({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="flex items-center gap-3 border-t border-line px-4 py-4">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-gold/60 bg-surface-2 text-[13px] font-bold text-gold">
-          {ADMIN.initials}
+          {initials}
         </span>
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block truncate text-[13px] font-bold text-text">{ADMIN.name}</span>
-          <span className="mt-0.5 block text-[11px] text-dim">{ADMIN.role}</span>
+          <span className="block truncate text-[13px] font-bold text-text">{user?.name}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-dim">Admin · {user?.email}</span>
         </span>
         <button
           type="button"
           aria-label="Log out"
-          // TODO: end the admin session through the auth API.
-          onClick={() => router.push("/")}
+          onClick={async () => {
+            await auth.logout();
+            router.push("/");
+          }}
           className="rounded-lg p-2 text-muted hover:text-danger"
         >
           <LogOut size={16} />

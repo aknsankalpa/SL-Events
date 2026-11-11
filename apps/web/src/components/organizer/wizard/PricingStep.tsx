@@ -12,5 +12,5 @@ export function PricingStep() {
     if (!draft.pricingReviewed) patch({ pricingReviewed: true });
   }, [draft.pricingReviewed, patch]);
 
-  return <PricingBody />;
+  return <PricingBody draft={draft} discounts={draft.discounts ?? { earlyBird: false, promoCodes: false }} onChange={(discounts) => patch({ discounts })} />;
 }

@@ -98,6 +98,11 @@ export type EventDraft = {
   ticketTypes: DraftTicketType[];
   seatMap: SeatMapState;
   pricingReviewed: boolean;
+  /**
+   * Whether the organizer wants early-bird prices or promo codes for this event. These aren't available yet: the
+   * choice is kept with the event, and every buyer pays the regular price until they are.
+   */
+  discounts?: { earlyBird: boolean; promoCodes: boolean };
 };
 
 /** Where an event is in its life. Organizers write drafts and submit them; SL Events publishes (on sale) or asks for changes. */
@@ -664,7 +669,7 @@ export type OrgTicketType = {
   name: string;
   perk: string;
   summary: string; // shown as "What buyers get"
-  color: string; // tailwind bg class
+  color: string; // hex, as chosen in the ticket editor
   price: number;
   quantity: number;
   sold: number;

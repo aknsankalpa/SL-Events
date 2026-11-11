@@ -117,6 +117,7 @@ export const organizers = mysqlTable(
     email: varchar("email", { length: 191 }),
     phone: varchar("phone", { length: 40 }),
     link: varchar("link", { length: 255 }),
+    city: varchar("city", { length: 60 }),
     logoUrl: varchar("logo_url", { length: 255 }),
     /** Bank details for payouts and for the "pay by transfer" instructions. */
     payout: json("payout").$type<{ bank?: string; holder?: string; number?: string }>(),
@@ -207,7 +208,7 @@ export const events = mysqlTable(
     /** Event-day settings (check-in opens, late cut-off, re-entry, ...). */
     operations: json("operations").$type<Record<string, unknown>>(),
     /** What the organizer typed that customers don't see as a field of its own: tags, the full address, file names. */
-    extras: json("extras").$type<{ tags?: string; address?: string; hostName?: string; coverName?: string; pricingReviewed?: boolean; template?: string }>(),
+    extras: json("extras").$type<{ tags?: string; address?: string; hostName?: string; coverName?: string; pricingReviewed?: boolean; template?: string; discounts?: { earlyBird: boolean; promoCodes: boolean } }>(),
     /** Why an admin asked for changes, unpublished or cancelled it. */
     statusNote: text("status_note"),
     submittedAt: datetime("submitted_at", { mode: "date" }),
@@ -442,6 +443,10 @@ export const eventStaff = mysqlTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     gate: varchar("gate", { length: 60 }),
+    /** "gate_lead", "scanner" or "support" (help desk). */
+    role: mysqlEnum("role", ["gate_lead", "scanner", "support"]).notNull().default("scanner"),
+    /** Paused by the organizer: they can't check anyone in until resumed. */
+    suspended: boolean("suspended").notNull().default(false),
     accessFrom: datetime("access_from", { mode: "date" }),
     accessUntil: datetime("access_until", { mode: "date" }),
   },

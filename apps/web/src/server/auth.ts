@@ -7,7 +7,7 @@
 //   - Every check that matters (who is signed in, which roles they hold) happens here, never in the browser.
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { db, schema as s } from "@/db";
 import { makeUser, type SessionUser } from "@/lib/session";
@@ -57,6 +57,15 @@ export async function endSession(): Promise<void> {
   const token = await currentToken();
   if (token) await db.delete(s.sessions).where(eq(s.sessions.id, sha256(token)));
   (await cookies()).delete(SESSION_COOKIE);
+}
+
+/** Signs the user out on every other device, keeping this one signed in. */
+export async function endOtherSessions(userId: number): Promise<number> {
+  const token = await currentToken();
+  const [res] = await db
+    .delete(s.sessions)
+    .where(and(eq(s.sessions.userId, userId), token ? sql`${s.sessions.id} <> ${sha256(token)}` : undefined));
+  return res.affectedRows;
 }
 
 /** Signs the user out everywhere, for example after a password reset. */

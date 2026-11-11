@@ -209,3 +209,56 @@ function refresh(slug: string) {
     /* outside a request */
   }
 }
+
+/* ---------- reading the audit log ---------- */
+
+const AUDIT_TYPES = ["payment", "permission", "decision", "settings", "account", "content", "export", "system"] as const;
+type AuditTypeName = (typeof AUDIT_TYPES)[number];
+
+/**
+ * Records something an admin did in the browser that has no server action of its own (an export, a report opened).
+ * The person is always the signed-in admin; the browser can't write an entry in someone else's name.
+ */
+export async function recordAudit(
+  user: User,
+  input: { type: string; action: string; item: string; changes?: AuditChange[]; booking?: string; bankRef?: string },
+) {
+  const type: AuditTypeName = AUDIT_TYPES.find((t) => t === input.type) ?? "system";
+  const [targetType, ...rest] = input.item.split(": ");
+  await audit(db, user, {
+    type,
+    action: input.action.slice(0, 80) || "Action",
+    targetType: (rest.length ? targetType! : "item").slice(0, 40),
+    targetId: (rest.length ? rest.join(": ") : input.item).slice(0, 64),
+    changes: (input.changes ?? []).slice(0, 20).map((c) => ({ label: String(c.label).slice(0, 80), from: String(c.from).slice(0, 200), to: String(c.to).slice(0, 200) })),
+  });
+}
+
+/** The newest audit entries, shaped for the admin's audit page. Read-only: nothing here changes an entry. */
+export async function listAudit(limit = 1000) {
+  const rows = await db.select().from(s.auditLog).orderBy(desc(s.auditLog.at), desc(s.auditLog.id)).limit(limit);
+  const actorIds = [...new Set(rows.map((r) => r.actorUserId).filter((x): x is number => !!x))];
+  const roles = actorIds.length ? await db.select().from(s.userRoles).where(inArray(s.userRoles.userId, actorIds)) : [];
+  const roleLabel = (id: number | null) => {
+    const mine = roles.filter((r) => r.userId === id).map((r) => r.role);
+    return mine.includes("admin") ? "Admin" : mine.includes("organizer") ? "Organizer" : mine.includes("staff") ? "Staff" : id ? "Customer" : "Automatic";
+  };
+  return rows.map((r) => {
+    const detail = (r.detail ?? {}) as { type?: string; changes?: AuditChange[]; device?: string; booking?: string; bankRef?: string };
+    return {
+      id: String(r.id),
+      at: r.at.toISOString(),
+      who: r.actorLabel,
+      initials: r.actorLabel
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? "")
+        .join(""),
+      role: roleLabel(r.actorUserId),
+      action: r.action,
+      item: r.targetId ? `${r.targetType}: ${r.targetId}` : r.targetType,
+      type: (AUDIT_TYPES.find((t) => t === detail.type) ?? "system") as AuditTypeName,
+      detail: { changes: detail.changes, device: detail.device, booking: detail.booking, bankRef: detail.bankRef },
+    };
+  });
+}

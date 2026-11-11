@@ -13,6 +13,7 @@ import { formatKst } from "@/lib/bookings";
 import type { Attendee, OrgBooking, OrgBookingStatus } from "@/lib/organizer";
 import type { AccountUser } from "./auth";
 import { canManageEvent, releaseExpired } from "./bookings";
+import { settingsOf } from "./operations";
 import { organizerOf } from "./organizer";
 
 type User = AccountUser & { id: number };
@@ -220,6 +221,19 @@ export async function eventAttendees(user: User, eventId: number) {
       seat: t.seatLabel ?? undefined,
     };
   });
+  // The latest scans at the door, newest first, for the scanner screen.
+  const scans = await db
+    .select({ outcome: s.scanLog.outcome, at: s.scanLog.at, gate: s.scanLog.gate, holder: s.tickets.holderName, ticket: s.tickets.ticketName })
+    .from(s.scanLog)
+    .leftJoin(s.tickets, eq(s.tickets.id, s.scanLog.ticketId))
+    .where(eq(s.scanLog.eventId, eventId))
+    .orderBy(desc(s.scanLog.at), desc(s.scanLog.id))
+    .limit(8);
+  const [refused] = await db
+    .select({ n: sql<string>`COUNT(*)` })
+    .from(s.scanLog)
+    .where(and(eq(s.scanLog.eventId, eventId), sql`${s.scanLog.outcome} <> 'admitted'`));
+
   const valid = attendees.filter((a) => a.state !== "cancelled");
   const paidRefs = new Set(valid.filter((a) => a.paid).map((a) => a.booking));
   return {
@@ -231,23 +245,37 @@ export async function eventAttendees(user: User, eventId: number) {
       vip: valid.filter((a) => a.paid && /vip/i.test(a.ticket)).length,
       unpaidTickets: valid.filter((a) => !a.paid).length,
       ticketsListed: attendees.length,
+      refusedScans: Number(refused?.n ?? 0),
     },
+    recentScans: scans.map((x) => ({ outcome: x.outcome, holder: x.holder ?? undefined, ticket: x.ticket ?? undefined, gate: x.gate ?? undefined, at: x.at.toISOString() })),
   };
 }
 
 /* ---------- checking a ticket in ---------- */
 
-export type CheckInOutcome = "admitted" | "already_used" | "not_found" | "wrong_event" | "not_paid" | "cancelled";
-export type CheckInResult = { outcome: CheckInOutcome; holder?: string; ticket?: string; seat?: string; booking?: string; scannedAt?: string; eventTitle?: string };
+export type CheckInOutcome = "admitted" | "already_used" | "not_found" | "wrong_event" | "not_paid" | "cancelled" | "too_early" | "too_late";
+export type CheckInResult = {
+  outcome: CheckInOutcome;
+  holder?: string;
+  ticket?: string;
+  seat?: string;
+  booking?: string;
+  scannedAt?: string;
+  eventTitle?: string;
+  /** For "too_early" / "too_late": when check-in opens and when it closes. */
+  opensAt?: string;
+  cutoffAt?: string;
+};
 
 /** Admins, owners/managers of the event's organizer, and door staff assigned to the event. */
 export async function canCheckIn(user: User, eventId: number): Promise<boolean> {
   if (await canManageEvent(user, eventId)) return true;
   const [row] = await db
-    .select({ from: s.eventStaff.accessFrom, until: s.eventStaff.accessUntil })
+    .select({ from: s.eventStaff.accessFrom, until: s.eventStaff.accessUntil, suspended: s.eventStaff.suspended })
     .from(s.eventStaff)
     .where(and(eq(s.eventStaff.eventId, eventId), eq(s.eventStaff.userId, user.id)));
-  if (!row) return false;
+  // A paused member can't check anyone in until the organizer resumes them.
+  if (!row || row.suspended) return false;
   const now = Date.now();
   return (!row.from || row.from.getTime() <= now) && (!row.until || row.until.getTime() >= now);
 }
@@ -258,6 +286,22 @@ export async function canCheckIn(user: User, eventId: number): Promise<boolean> 
  */
 export async function checkIn(user: User, eventId: number, rawCode: string, gate: string | null): Promise<CheckInResult> {
   const code = rawCode.trim().toUpperCase().slice(0, 40);
+
+  // Once the organizer has saved event-day settings, check-in opens and closes when they said.
+  const [event] = await db.select({ startsAt: s.events.startsAt, operations: s.events.operations }).from(s.events).where(eq(s.events.id, eventId));
+  if (event?.startsAt && (event.operations as { settings?: unknown } | null)?.settings) {
+    const settings = settingsOf(event.operations);
+    const day = new Date(event.startsAt.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+    const opens = new Date(`${day}T${settings.checkInOpens.padStart(5, "0")}:00+09:00`);
+    const cutoff = settings.lateCutoff === "none" ? null : new Date(`${day}T${settings.lateCutoff.padStart(5, "0")}:00+09:00`);
+    const now = Date.now();
+    const timing: CheckInOutcome | null = now < opens.getTime() ? "too_early" : cutoff && now > cutoff.getTime() ? "too_late" : null;
+    if (timing) {
+      await db.insert(s.scanLog).values({ eventId, code, outcome: timing, staffUserId: user.id, gate });
+      return { outcome: timing, opensAt: formatKst(opens.toISOString()), cutoffAt: cutoff ? formatKst(cutoff.toISOString()) : undefined };
+    }
+  }
+
   const [res] = await db.execute(sql`
     UPDATE tickets t JOIN bookings b ON b.id = t.booking_id
     SET t.scanned_at = UTC_TIMESTAMP(), t.scanned_by = ${user.id}, t.gate = ${gate}

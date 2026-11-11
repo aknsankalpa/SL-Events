@@ -25,6 +25,7 @@ import {
   type OrgEventStatus,
   type SeatSection,
 } from "@/lib/organizer";
+import type { OrganizerProfile } from "@/lib/profile";
 import { defaultDetection } from "@/lib/seatDetect";
 import { requireUser, type AccountUser } from "./auth";
 import { releaseExpired } from "./bookings";
@@ -184,6 +185,7 @@ export async function draftOf(e: EventRow, exec: Executor = db): Promise<EventDr
         : undefined,
     },
     pricingReviewed: extras.pricingReviewed ?? false,
+    discounts: { earlyBird: !!extras.discounts?.earlyBird, promoCodes: !!extras.discounts?.promoCodes },
   });
 }
 
@@ -502,7 +504,7 @@ export async function saveEvent(org: Org, id: number | null, input: unknown, opt
           d.organizerAbout || d.organizerEmail || d.organizerPhone || d.organizerLink
             ? { about: d.organizerAbout || undefined, email: d.organizerEmail || undefined, phone: d.organizerPhone || undefined, link: d.organizerLink || undefined }
             : null,
-        extras: { tags: d.tags, address: d.address, hostName: d.organizerName ?? "", coverName: d.coverName, pricingReviewed: d.pricingReviewed, template: d.seatMap.template },
+        extras: { tags: d.tags, address: d.address, hostName: d.organizerName ?? "", coverName: d.coverName, pricingReviewed: d.pricingReviewed, template: d.seatMap.template, discounts: { earlyBird: !!d.discounts?.earlyBird, promoCodes: !!d.discounts?.promoCodes } },
       };
 
       let eventId = row?.id ?? 0;
@@ -575,4 +577,90 @@ export async function changeEventStatus(org: Org, id: number, action: "pause" | 
   });
   refreshPublic(row.slug);
   return { ok: true, value: { status: "cancelled", cancelledBookings } };
+}
+
+/* ---------- the organizer's profile ---------- */
+
+type ProfileSettings = { roleTitle?: string; language?: string; organizerNotifications?: Record<string, boolean> };
+
+const NOTIFY_DEFAULTS = { newBooking: true, paymentProof: true, lowStock: true, dailySummary: false, platformNews: false };
+
+/** The profile page: the person (from their account) and the organization (shared by its team). */
+export async function getProfile(user: User, org: Org): Promise<OrganizerProfile> {
+  const [u] = await db.select().from(s.users).where(eq(s.users.id, user.id));
+  const [o] = await db.select().from(s.organizers).where(eq(s.organizers.id, org.id));
+  const settings = (u?.settings ?? {}) as ProfileSettings;
+  return {
+    fullName: u!.name,
+    roleTitle: settings.roleTitle ?? (org.role === "owner" ? "Owner" : "Manager"),
+    email: u!.email,
+    phone: u!.phone ?? "",
+    language: settings.language ?? "English",
+    orgName: o!.name,
+    orgBio: o!.about ?? "",
+    orgEmail: o!.email ?? "",
+    orgPhone: o!.phone ?? "",
+    orgLink: o!.link ?? "",
+    city: o!.city ?? "",
+    logoUrl: o!.logoUrl ?? "",
+    payout: { bank: o!.payout?.bank ?? "", number: o!.payout?.number ?? "", holder: o!.payout?.holder ?? "" },
+    notifications: { ...NOTIFY_DEFAULTS, ...(settings.organizerNotifications ?? {}) },
+    verified: o!.status === "active",
+    memberSince: new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "Asia/Seoul" }).format(o!.createdAt),
+  };
+}
+
+/**
+ * Saves the profile. The person's own details go on their account; the organization's details are shared by the
+ * team. Only the owner can change the payout account, because that is where the money goes.
+ */
+export async function saveProfile(user: User, org: Org, input: Partial<OrganizerProfile>): Promise<Outcome<OrganizerProfile>> {
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const fullName = str(input.fullName, 120).replace(/\s+/g, " ");
+  const orgName = str(input.orgName, 160);
+  const orgEmail = str(input.orgEmail, 191).toLowerCase();
+  if (!fullName) return fail(400, "Enter your name.");
+  if (!orgName) return fail(400, "Your organization needs a name.");
+  if (orgEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(orgEmail)) return fail(400, "Enter a valid public contact email.");
+  const payout = { bank: str(input.payout?.bank, 80), number: str(input.payout?.number, 40), holder: str(input.payout?.holder, 120) };
+  if ((payout.number || payout.holder) && (!/^[\d\s-]{8,24}$/.test(payout.number) || !payout.holder)) return fail(400, "Enter the account number and the name on the account.");
+
+  const [current] = await db.select().from(s.organizers).where(eq(s.organizers.id, org.id));
+  const payoutChanged = JSON.stringify(current!.payout ?? { bank: "", number: "", holder: "" }) !== JSON.stringify(payout) && (payout.number || current!.payout?.number);
+  if (payoutChanged && org.role !== "owner") return fail(403, "Only the organization's owner can change the payout account.");
+
+  let logoUrl: string | null;
+  try {
+    logoUrl = await storeImage(`logos/${org.id}`, input.logoUrl);
+  } catch (e) {
+    return fail(400, e instanceof Error ? e.message : "That picture can't be used.");
+  }
+  const [u] = await db.select({ settings: s.users.settings }).from(s.users).where(eq(s.users.id, user.id));
+  const notifications = Object.fromEntries(Object.keys(NOTIFY_DEFAULTS).map((k) => [k, !!input.notifications?.[k as keyof typeof NOTIFY_DEFAULTS]]));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(s.users)
+      .set({
+        name: fullName,
+        phone: str(input.phone, 40) || null,
+        settings: { ...((u?.settings ?? {}) as ProfileSettings), roleTitle: str(input.roleTitle, 60), language: str(input.language, 40) || "English", organizerNotifications: notifications },
+      })
+      .where(eq(s.users.id, user.id));
+    await tx
+      .update(s.organizers)
+      .set({
+        name: orgName,
+        about: str(input.orgBio, 2000) || null,
+        email: orgEmail || null,
+        phone: str(input.orgPhone, 40) || null,
+        link: str(input.orgLink, 255) || null,
+        city: str(input.city, 60) || null,
+        logoUrl,
+        payout: payout.number ? payout : null,
+      })
+      .where(eq(s.organizers.id, org.id));
+  });
+  // The organizer's name appears on its event pages.
+  if (orgName !== current!.name) refreshPublic();
+  return { ok: true, value: await getProfile(user, org) };
 }

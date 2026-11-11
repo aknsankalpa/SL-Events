@@ -7,8 +7,10 @@ import { Field } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/StatusBadge";
 import { Toggle } from "@/components/ui/Toggle";
 import { formatKrw } from "@/lib/format";
-import { orgTicketTypes, type OrgTicketType } from "@/lib/organizer";
+import Link from "next/link";
+import type { OrgTicketType } from "@/lib/organizer";
 import { useOrganizer } from "./OrganizerContext";
+import { useEventData } from "./useEventData";
 import { EventPicker, OrgPageHeader, Panel, StatCard } from "./ui";
 
 const STATUS = {
@@ -27,8 +29,12 @@ function statusOf(t: OrgTicketType) {
 
 export function TicketTypesPage() {
   const { event } = useOrganizer();
-  const [types, setTypes] = useState<OrgTicketType[]>(orgTicketTypes);
-  const [editingId, setEditingId] = useState<string | null>("vip");
+  const url = event.id ? `/api/organizer/events/${encodeURIComponent(event.id)}/ticket-types` : null;
+  const { data, error, reload } = useEventData<{ sellMode: "tickets" | "seats"; types: OrgTicketType[] }>(url);
+  const types = useMemo(() => data?.types ?? [], [data]);
+  const seated = data?.sellMode === "seats";
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string>();
 
   const editing = types.find((t) => t.id === editingId) ?? null;
 
@@ -39,34 +45,40 @@ export function TicketTypesPage() {
     return { forSale, sold, held, available: forSale - sold - held };
   }, [types]);
 
-  const update = (id: string, patch: Partial<OrgTicketType>) =>
-    setTypes((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-
-  function addType() {
-    const id = `type-${types.length + 1}-${Date.now() % 10000}`;
-    setTypes((prev) => [
-      ...prev,
-      {
-        id,
-        name: "New ticket type",
-        perk: "",
-        summary: "",
-        color: "bg-red-500",
-        price: 0,
-        quantity: 50,
-        sold: 0,
-        held: 0,
-        salesStart: "1 Oct 2026",
-        salesEnd: "13 Nov 2026",
-        maxPerOrder: 6,
-        hidden: false,
-        paused: false,
-      },
-    ]);
-    setEditingId(id);
+  /** Saves on the server, which refuses a quantity below what is sold and held; returns its reason when it refuses. */
+  async function update(id: string, patch: Partial<OrgTicketType>): Promise<string | undefined> {
+    if (!url) return "Choose an event first.";
+    try {
+      const res = await fetch(`${url}/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      await reload();
+      return res.ok ? undefined : (body.error ?? "Couldn't save the ticket type.");
+    } catch {
+      return "We couldn't reach SL Events.";
+    }
   }
 
-  const soldOut = types.filter((t) => t.sold >= t.quantity);
+  async function addType() {
+    if (!url) return;
+    setProblem(undefined);
+    try {
+      const res = await fetch(url, { method: "POST", credentials: "same-origin", cache: "no-store" });
+      const body = (await res.json().catch(() => ({}))) as { key?: string; error?: string };
+      if (!res.ok) return setProblem(body.error ?? "Couldn't add a ticket type.");
+      await reload();
+      setEditingId(body.key ?? null);
+    } catch {
+      setProblem("We couldn't reach SL Events.");
+    }
+  }
+
+  const soldOut = types.filter((t) => t.quantity > 0 && t.sold >= t.quantity);
 
   return (
     <>
@@ -76,12 +88,26 @@ export function TicketTypesPage() {
         actions={
           <>
             <EventPicker />
-            <Button onClick={addType}>
+            <Button onClick={() => void addType()} disabled={!event.id || seated}>
               <Plus size={16} aria-hidden /> Add ticket type
             </Button>
           </>
         }
       />
+
+      {problem && (
+        <p role="alert" className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-text">
+          {problem}
+        </p>
+      )}
+      {seated && (
+        <p className="mb-4 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
+          This event sells numbered seats, so its prices and quantities come from the seat map.{" "}
+          <Link href={`/organizer/events/${event.id}/edit#seat-map`} className="font-bold text-amber hover:text-gold">
+            Open the seat map
+          </Link>
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Tickets for sale" value={totals.forSale} Icon={Ticket} sub={`${types.length} ticket types`} />
@@ -138,7 +164,7 @@ export function TicketTypesPage() {
                     <tr key={t.id} className={`border-b border-line last:border-b-0 ${t.id === editingId ? "bg-gold/5" : ""}`}>
                       <td className="py-4 pl-5 pr-4">
                         <span className="flex items-center gap-3">
-                          <span aria-hidden className={`size-2.5 rounded-full ${t.color}`} />
+                          <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: t.color }} />
                           <span className="leading-tight">
                             <span className="block font-bold text-text">{t.name}</span>
                             <span className="mt-1 block text-[11px] text-dim">{t.perk}</span>
@@ -181,7 +207,7 @@ export function TicketTypesPage() {
                 <li key={t.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <span className="flex items-center gap-3">
-                      <span aria-hidden className={`size-2.5 rounded-full ${t.color}`} />
+                      <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: t.color }} />
                       <span className="leading-tight">
                         <span className="block text-sm font-bold text-text">{t.name}</span>
                         <span className="mt-1 block text-[11px] text-dim">{t.perk}</span>
@@ -205,6 +231,11 @@ export function TicketTypesPage() {
               );
             })}
           </ul>
+          {types.length === 0 && (
+            <p className="p-8 text-center text-sm text-muted">
+              {!event.id ? "Create an event first." : !data ? (error ?? "Loading ticket types…") : seated ? "Numbered-seat events have no separate ticket types." : "No ticket types yet."}
+            </p>
+          )}
         </Panel>
 
         {editing && (
@@ -221,7 +252,7 @@ export function TicketTypesPage() {
 }
 
 function Availability({ type: t, left }: { type: OrgTicketType; left: number }) {
-  const pct = Math.min(100, Math.round(((t.sold + t.held) / t.quantity) * 100));
+  const pct = Math.min(100, Math.round(((t.sold + t.held) / Math.max(1, t.quantity)) * 100));
   return (
     <div className="w-full min-w-32">
       <div className="mb-1.5 flex justify-between text-[11px] text-muted">
@@ -242,10 +273,19 @@ function TypeEditor({
 }: {
   type: OrgTicketType;
   onClose: () => void;
-  onSave: (patch: Partial<OrgTicketType>) => void;
+  onSave: (patch: Partial<OrgTicketType>) => Promise<string | undefined>;
 }) {
   const [draft, setDraft] = useState(type);
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const run = async (patch: Partial<OrgTicketType>) => {
+    setBusy(true);
+    const problem = await onSave(patch);
+    setBusy(false);
+    setError(problem);
+    setSaved(!problem);
+  };
   const floor = type.sold + type.held;
   const set = (patch: Partial<OrgTicketType>) => {
     setDraft((d) => ({ ...d, ...patch }));
@@ -265,12 +305,26 @@ function TypeEditor({
         className="mt-5 space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          // TODO: persist through the API; the server must also enforce the quantity floor.
-          onSave({ ...draft, quantity: Math.max(floor, draft.quantity) });
-          setSaved(true);
+          // The server checks the quantity again against what is sold and held right now.
+          void run({
+            name: draft.name,
+            summary: draft.summary,
+            price: draft.price,
+            quantity: Math.max(floor, draft.quantity),
+            maxPerOrder: draft.maxPerOrder,
+            salesEnd: draft.salesEnd,
+            hidden: draft.hidden,
+          });
         }}
       >
         <Field label="Name" value={draft.name} onChange={(e) => set({ name: e.target.value })} />
+        <Field
+          label="Price (KRW)"
+          inputMode="numeric"
+          value={String(draft.price)}
+          onChange={(e) => set({ price: Number(e.target.value.replace(/\D/g, "")) || 0 })}
+          hint={type.sold + type.held > 0 ? "Bookings already made keep the price they were made at." : "0 makes it a free ticket."}
+        />
         <Field label="What buyers get" value={draft.summary} onChange={(e) => set({ summary: e.target.value, perk: e.target.value })} />
 
         <div>
@@ -303,8 +357,8 @@ function TypeEditor({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
-          <Field label="Sales start" value={draft.salesStart} onChange={(e) => set({ salesStart: e.target.value })} />
-          <Field label="Sales end" value={draft.salesEnd} onChange={(e) => set({ salesEnd: e.target.value })} />
+          <Field label="Sales start" value={draft.salesStart} readOnly disabled hint="Sales open when SL Events publishes the event." />
+          <Field label="Last day of sales (optional)" type="date" value={draft.salesEnd} onChange={(e) => set({ salesEnd: e.target.value })} hint="Leave empty to sell until the event." />
         </div>
         <Field
           label="Max per order"
@@ -322,23 +376,32 @@ function TypeEditor({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Button type="submit" size="lg">
-            {saved ? "Saved" : "Save"}
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? "Saving…" : saved ? "Saved" : "Save"}
           </Button>
           <Button
             type="button"
             size="lg"
             variant="outline"
+            disabled={busy}
             className="border-line text-text hover:bg-surface-2"
             onClick={() => {
               const paused = !draft.paused;
               setDraft((d) => ({ ...d, paused }));
-              onSave({ paused });
+              void run({ paused });
             }}
           >
             {draft.paused ? "Resume sales" : "Pause sales"}
           </Button>
         </div>
+        {error && (
+          <p role="alert" className="text-xs font-bold text-danger">
+            {error}
+          </p>
+        )}
+        {type.hidden && type.quantity === 0 && (
+          <p className="text-[11px] text-dim">New ticket types start hidden with no tickets. Set them up, then switch off &quot;Hide from buyers&quot;.</p>
+        )}
       </form>
     </Panel>
   );

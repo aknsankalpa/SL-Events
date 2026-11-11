@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { BadgeCheck, Camera, Check, Globe, KeyRound, Landmark, Mail, MapPin, Phone, Smartphone, User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -27,13 +28,36 @@ const languages = ["English", "සිංහල (Sinhala)", "தமிழ் (Tam
 export function ProfilePage() {
   const hydrated = useHydrated();
   const { profile, saveProfile } = useOrganizerProfile();
-  if (!hydrated) return <p className="text-sm text-muted">Loading profile…</p>;
-  return <ProfileForm key="profile" initial={profile} onSave={saveProfile} />;
+  // After a save the form starts again from what the server now has (a new logo becomes its stored address).
+  const [version, setVersion] = useState(0);
+  if (!hydrated || !profile) return <p className="text-sm text-muted">Loading profile…</p>;
+  return (
+    <ProfileForm
+      key={version}
+      initial={profile}
+      justSaved={version > 0}
+      onSave={async (p) => {
+        const result = await saveProfile(p);
+        if (result.ok) setVersion((v) => v + 1);
+        return result;
+      }}
+    />
+  );
 }
 
-function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (p: OrganizerProfile) => void }) {
+function ProfileForm({
+  initial,
+  justSaved,
+  onSave,
+}: {
+  initial: OrganizerProfile;
+  justSaved: boolean;
+  onSave: (p: OrganizerProfile) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
   const [form, setForm] = useState(initial);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(justSaved);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const [logoError, setLogoError] = useState<string>();
   const [editingPayout, setEditingPayout] = useState(false);
   const [securityNote, setSecurityNote] = useState<string>();
@@ -58,13 +82,15 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
     }
   }
 
-  function save() {
+  async function save() {
     const e: typeof errors = {};
     if (!form.fullName.trim()) e.fullName = "Enter your name.";
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) e.email = "Enter a valid email address.";
     if (!form.orgName.trim()) e.orgName = "Your organization needs a name.";
     if (form.orgEmail.trim() && !/^\S+@\S+\.\S+$/.test(form.orgEmail.trim())) e.orgEmail = "Enter a valid email address.";
-    if (!/^[\d\s-]{8,24}$/.test(form.payout.number.trim()) || !form.payout.holder.trim()) {
+    // The payout account is optional until the organizer is ready to be paid; when given, both parts are needed.
+    const payoutGiven = !!(form.payout.number.trim() || form.payout.holder.trim());
+    if (payoutGiven && (!/^[\d\s-]{8,24}$/.test(form.payout.number.trim()) || !form.payout.holder.trim())) {
       e.payout = "Enter the account number and the name on the account.";
     }
     setErrors(e);
@@ -72,10 +98,11 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
       if (e.payout) setEditingPayout(true);
       return;
     }
-    // TODO: PATCH the organizer profile; changes to the payout account are re-verified by SL Events first.
-    onSave(form);
-    setSaved(true);
-    setEditingPayout(false);
+    setSaving(true);
+    setSaveError(undefined);
+    const result = await onSave(form);
+    setSaving(false);
+    if (!result.ok) setSaveError(result.error);
   }
 
   const logoLetters = profileInitials({ fullName: form.orgName || form.fullName });
@@ -99,7 +126,7 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                 Discard changes
               </Button>
             )}
-            <Button onClick={save} disabled={!dirty && !saved}>
+            <Button onClick={() => void save()} disabled={(!dirty && !saved) || saving}>
               {saved && !dirty ? (
                 <>
                   <Check size={16} aria-hidden /> Saved
@@ -111,6 +138,11 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
           </>
         }
       />
+      {saveError && (
+        <p role="alert" className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-text">
+          {saveError}
+        </p>
+      )}
 
       <div className="mx-auto max-w-5xl space-y-5">
         <Panel className="flex flex-wrap items-center gap-5 bg-gradient-to-r from-surface via-surface to-[#2a0d0d] p-5 sm:p-6">
@@ -168,7 +200,7 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Full name" icon={<User />} value={form.fullName} onChange={(e) => set({ fullName: e.target.value })} error={errors.fullName} autoComplete="name" />
             <Field label="Your role" value={form.roleTitle} onChange={(e) => set({ roleTitle: e.target.value })} placeholder="Founder, event lead…" />
-            <Field label="Email" type="email" icon={<Mail />} value={form.email} onChange={(e) => set({ email: e.target.value })} error={errors.email} autoComplete="email" />
+            <Field label="Login email" type="email" icon={<Mail />} value={form.email} readOnly disabled hint="Your login email can't be changed here. Contact SL Events if it needs to change." />
             <Field label="Mobile number" type="tel" icon={<Phone />} value={form.phone} onChange={(e) => set({ phone: e.target.value })} autoComplete="tel" />
             <div>
               <label htmlFor="org-language" className="mb-2 block text-xs font-bold text-muted">
@@ -318,30 +350,35 @@ function ProfileForm({ initial, onSave }: { initial: OrganizerProfile; onSave: (
                 <p className="flex items-center gap-2 text-[13px] font-bold text-text">
                   <KeyRound size={14} aria-hidden className="text-gold" /> Password
                 </p>
-                <p className="mt-1 text-[11px] text-dim">Last changed 4 months ago</p>
+                <p className="mt-1 text-[11px] text-dim">Set a new one with a code sent to your login email.</p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-line text-text hover:bg-surface-2"
-                // TODO: trigger the password-reset email through the auth API.
-                onClick={() => setSecurityNote("We've emailed you a link to choose a new password.")}
+              <Link
+                href={`/forgot-password?email=${encodeURIComponent(form.email)}`}
+                className="inline-flex h-9 items-center rounded-lg border border-line px-3 text-xs font-bold text-text hover:bg-surface-2"
               >
                 Change password
-              </Button>
+              </Link>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
               <div className="leading-tight">
                 <p className="flex items-center gap-2 text-[13px] font-bold text-text">
                   <Smartphone size={14} aria-hidden className="text-gold" /> Logged-in devices
                 </p>
-                <p className="mt-1 text-[11px] text-dim">Chrome on Windows · Android phone</p>
+                <p className="mt-1 text-[11px] text-dim">Sign out every other phone or computer using your account.</p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="border-line text-text hover:bg-surface-2"
-                onClick={() => setSecurityNote("Other devices have been logged out.")}
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/auth/sessions", { method: "DELETE", credentials: "same-origin" });
+                    const data = (await res.json().catch(() => ({}))) as { signedOut?: number };
+                    setSecurityNote(res.ok ? (data.signedOut ? `Signed out ${data.signedOut} other device${data.signedOut === 1 ? "" : "s"}.` : "No other devices were signed in.") : "Couldn't sign out other devices.");
+                  } catch {
+                    setSecurityNote("We couldn't reach SL Events.");
+                  }
+                }}
               >
                 Log out other devices
               </Button>
