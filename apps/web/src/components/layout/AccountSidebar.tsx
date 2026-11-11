@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, HelpCircle, History, LogOut, Ticket, User } from "lucide-react";
 import { currentUser } from "@/lib/data";
-import { signOut } from "@/lib/session";
-import { useSession } from "@/components/auth/useSession";
+import { auth, useSession } from "@/components/auth/useSession";
 import { useNotifications } from "@/components/notifications/useNotifications";
 
 const items = [
@@ -65,9 +64,8 @@ export function AccountSidebar() {
       <div className="border-t border-line pt-3">
         <button
           type="button"
-          // TODO: end the session through the auth API.
-          onClick={() => {
-            signOut();
+          onClick={async () => {
+            await auth.logout();
             router.push("/");
           }}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-bold text-danger transition-colors hover:bg-danger/10"

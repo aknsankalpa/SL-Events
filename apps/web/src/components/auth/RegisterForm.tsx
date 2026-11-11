@@ -6,8 +6,9 @@ import { useState } from "react";
 import { Lock, Mail, User } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, PasswordField } from "@/components/ui/Field";
-import { accountExists, registerAccount, safeNext } from "@/lib/session";
+import { safeNext } from "@/lib/session";
 import { SocialButtons } from "./SocialButtons";
+import { auth, devCodes } from "./useSession";
 
 type Errors = Partial<Record<"name" | "email" | "password" | "confirm" | "terms", string>>;
 
@@ -17,8 +18,10 @@ export function RegisterForm() {
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
   const [errors, setErrors] = useState<Errors>({});
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string>();
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const get = (key: string) => String(data.get(key) ?? "").trim();
@@ -27,16 +30,24 @@ export function RegisterForm() {
     const found: Errors = {};
     if (!get("name")) found.name = "Enter your name.";
     if (!/^\S+@\S+\.\S+$/.test(get("email"))) found.email = "Enter a valid email address.";
-    else if (accountExists(get("email"))) found.email = "There is already an account with this email. Log in instead.";
     if (password.length < 8) found.password = "Use at least 8 characters.";
     if (data.get("confirm") !== password) found.confirm = "Passwords do not match.";
     if (!data.get("terms")) found.terms = "You need to accept the terms to continue.";
     setErrors(found);
+    setFormError(undefined);
     if (Object.keys(found).length) return;
 
-    // TODO: call the registration API, which emails the verification code.
-    registerAccount(get("name"), get("email"));
-    router.push(`/verify-email?email=${encodeURIComponent(get("email"))}&next=${encodeURIComponent(next)}`);
+    // The server creates the account, signs it in and emails the verification code.
+    setBusy(true);
+    const result = await auth.register(get("name"), get("email"), password);
+    setBusy(false);
+    if (!result.ok) {
+      setErrors((cur) => ({ ...cur, ...result.errors }));
+      setFormError(result.error);
+      return;
+    }
+    devCodes.save(result.devCode);
+    router.push(`/verify-email?email=${encodeURIComponent(result.user.email)}&next=${encodeURIComponent(next)}`);
   }
 
   return (
@@ -89,8 +100,13 @@ export function RegisterForm() {
           <Checkbox name="news" label="Send me news about upcoming events. (Optional)" />
         </div>
 
-        <Button type="submit" size="lg" className="w-full">
-          Create account
+        {formError && (
+          <p role="alert" className="text-xs text-danger">
+            {formError}
+          </p>
+        )}
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+          {busy ? "Creating your account…" : "Create account"}
         </Button>
         <p className="text-center text-[11px] text-dim">We&apos;ll email you a code to confirm your address.</p>
       </form>

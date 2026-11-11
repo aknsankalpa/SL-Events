@@ -14,7 +14,11 @@ import { applicationStore } from "../lib/organizerApplications";
 import { organizerProfiles } from "../lib/organizers";
 import { holdsSeats } from "../lib/seating";
 import { ticketsFor } from "../lib/bookings";
+import { hashPassword } from "../server/password";
 import * as s from "./schema";
+
+/** Every demo account signs in with this password on the development database. Never used on the live site. */
+export const DEMO_PASSWORD = "slevents2026";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
@@ -342,6 +346,8 @@ async function main() {
     console.log("Nothing done. Use --dry-run to check the data, or --reset to empty the tables and insert it.");
     return;
   }
+  const demoHash = await hashPassword(DEMO_PASSWORD);
+  for (const u of rows.users) u.passwordHash = demoHash;
   const { db, pool } = await import("./index");
   const [[{ name }]] = (await pool.query("SELECT DATABASE() AS name")) as unknown as [[{ name: string }]];
   if (!/dev/i.test(name ?? "") && !args.has("--force")) {
@@ -352,6 +358,9 @@ async function main() {
   await db.transaction(async (tx) => {
     await tx.execute("SET FOREIGN_KEY_CHECKS = 0");
     for (const k of [...order].reverse()) await tx.delete(tables[k]);
+    // Signed-in sessions and email codes belong to the old accounts: clear them too.
+    await tx.delete(s.sessions);
+    await tx.delete(s.authCodes);
     await tx.execute("SET FOREIGN_KEY_CHECKS = 1");
     for (const k of order) {
       const list = rows[k];
@@ -359,6 +368,7 @@ async function main() {
     }
   });
   console.log(`Seeded "${name}": ${summary}`);
+  console.log(`Demo accounts sign in with the password "${DEMO_PASSWORD}".`);
   await pool.end();
 }
 

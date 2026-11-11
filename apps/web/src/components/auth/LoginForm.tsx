@@ -6,16 +6,18 @@ import { useState } from "react";
 import { Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, PasswordField } from "@/components/ui/Field";
-import { safeNext, signIn } from "@/lib/session";
+import { safeNext } from "@/lib/session";
 import { SocialButtons } from "./SocialButtons";
+import { auth } from "./useSession";
 
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [busy, setBusy] = useState(false);
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const email = String(data.get("email") ?? "").trim();
@@ -26,9 +28,14 @@ export function LoginForm() {
     setErrors(found);
     if (Object.keys(found).length) return;
 
-    // TODO: check the password with the auth API; for now any valid email and password signs in.
-    const user = signIn(email);
-    router.push(user.verified ? next : `/verify-email?email=${encodeURIComponent(user.email)}&next=${encodeURIComponent(next)}`);
+    setBusy(true);
+    const result = await auth.login(email, password);
+    setBusy(false);
+    if (!result.ok) {
+      setErrors({ password: result.error ?? "Couldn't log in." });
+      return;
+    }
+    router.push(result.user.verified ? next : `/verify-email?email=${encodeURIComponent(result.user.email)}&next=${encodeURIComponent(next)}`);
   }
 
   return (
@@ -62,8 +69,8 @@ export function LoginForm() {
           }
         />
         <Checkbox name="remember" defaultChecked label="Keep me logged in on this device" />
-        <Button type="submit" size="lg" className="w-full">
-          Log in
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+          {busy ? "Logging in…" : "Log in"}
         </Button>
       </form>
 

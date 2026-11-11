@@ -1,22 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock, KeyRound, Lock, Mail } from "lucide-react";
+import { ArrowLeft, Clock, KeyRound, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { auth, devCodes } from "./useSession";
 
 const steps = [
-  { Icon: Mail, text: "We email you a reset link" },
-  { Icon: Clock, text: "Open it within 30 minutes" },
+  { Icon: Mail, text: "We email you a 6-digit code" },
+  { Icon: Clock, text: "Use it within 15 minutes" },
   { Icon: Lock, text: "Choose a new password and log in" },
 ];
 
 export function ForgotPasswordForm() {
+  const router = useRouter();
   const [error, setError] = useState<string>();
-  const [sentTo, setSentTo] = useState<string>();
+  const [busy, setBusy] = useState(false);
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) {
@@ -24,8 +27,16 @@ export function ForgotPasswordForm() {
       return;
     }
     setError(undefined);
-    // TODO: call the password-reset API.
-    setSentTo(email);
+    setBusy(true);
+    const result = await auth.forgotPassword(email);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    // The answer is the same whether or not the email has an account, so nobody can use this to check emails.
+    devCodes.save(result.devCode);
+    router.push(`/reset-password?email=${encodeURIComponent(email)}`);
   }
 
   return (
@@ -39,30 +50,15 @@ export function ForgotPasswordForm() {
       </span>
       <h1 className="font-display text-[30px] font-bold leading-tight text-text">Forgot your password?</h1>
       <p className="mt-3 text-[13px] leading-relaxed text-muted">
-        Enter the email you signed up with. We&apos;ll send you a link to choose a new password.
+        Enter the email you signed up with. We&apos;ll send you a code to choose a new password.
       </p>
 
-      {sentTo ? (
-        <div role="status" className="mt-6 flex items-start gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm text-text">
-          <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" aria-hidden />
-          <div>
-            <p>
-              If an account exists for <strong>{sentTo}</strong>, a reset link is on its way.
-            </p>
-            {/* No real email is sent yet; this stands in for clicking the link in it. */}
-            <Link href={`/reset-password?email=${encodeURIComponent(sentTo)}`} className="mt-2 inline-block text-xs font-bold text-amber hover:text-gold">
-              Open the reset link (preview)
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">
-          <Field label="Email" name="email" type="email" autoComplete="email" placeholder="you@example.com" icon={<Mail />} error={error} />
-          <Button type="submit" size="lg" className="w-full">
-            Send reset link
-          </Button>
-        </form>
-      )}
+      <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">
+        <Field label="Email" name="email" type="email" autoComplete="email" placeholder="you@example.com" icon={<Mail />} error={error} />
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+          {busy ? "Sending…" : "Send reset code"}
+        </Button>
+      </form>
 
       <section className="mt-6 rounded-xl border border-line bg-surface p-5">
         <h2 className="mb-4 text-[11px] font-bold uppercase tracking-wider text-muted">What happens next</h2>

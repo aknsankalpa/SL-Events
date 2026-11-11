@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BadgeCheck, Camera, Check, Download, Globe, LogOut, Lock, MapPin, Pencil, Phone, Trash2 } from "lucide-react";
-import { useSession } from "@/components/auth/useSession";
+import { auth, useSession } from "@/components/auth/useSession";
 import { useBookings } from "@/components/booking/useBookings";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,7 +13,6 @@ import { Field, PasswordField, SelectField } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/StatusBadge";
 import { Toggle } from "@/components/ui/Toggle";
 import { cities } from "@/lib/data";
-import { deleteAccount, signOut, updateProfile } from "@/lib/session";
 import { formatKst } from "@/lib/bookings";
 import { NotificationPreferences } from "./NotificationPreferences";
 import { useCustomerSettings } from "./useCustomerSettings";
@@ -38,14 +37,14 @@ export function ProfileForm() {
 
   if (!user) return null;
 
-  function onSave(e: React.FormEvent<HTMLFormElement>) {
+  async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const name = String(data.get("name") ?? "").trim();
     if (!name) return setNameError("Enter your name.");
     setNameError(undefined);
-    // TODO: PATCH the profile through the API.
-    updateProfile({ name });
+    const result = await auth.updateName(name);
+    if (!result.ok) return setNameError(result.errors?.name ?? result.error ?? "Couldn't save your name.");
     update((s) => ({ ...s, phone: String(data.get("phone") ?? "").trim(), city: String(data.get("city") ?? "") }));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -67,8 +66,8 @@ export function ProfileForm() {
     URL.revokeObjectURL(url);
   }
 
-  function logOut() {
-    signOut();
+  async function logOut() {
+    await auth.logout();
     router.push("/");
   }
 
@@ -286,10 +285,9 @@ export function ProfileForm() {
           </Button>
           <Button
             variant="danger"
-            // TODO: call the delete-account API.
-            onClick={() => {
-              deleteAccount(user.email);
-              router.push("/");
+            onClick={async () => {
+              const result = await auth.deleteAccount();
+              if (result.ok) router.push("/");
             }}
           >
             Delete account

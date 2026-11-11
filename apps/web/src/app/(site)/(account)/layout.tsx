@@ -11,3 +11,9 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
     </RequireCustomer>
   );
 }
+
+/**
+ * Customer-only pages wait for the sign-in check before showing anything, so a navigation into them is allowed to wait.
+ * (Without this, Next.js keeps re-validating the hidden page in development and reloads it.)
+ */
+export const instant = false;

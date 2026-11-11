@@ -4,11 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Bell, ChevronDown, LogOut, Menu, X } from "lucide-react";
-import { useSession } from "@/components/auth/useSession";
+import { auth, useSession } from "@/components/auth/useSession";
 import { useNotifications } from "@/components/notifications/useNotifications";
 import { LinkButton } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
-import { signOut } from "@/lib/session";
 
 type NavItem = { href: string; label: string; match: string[] };
 
@@ -42,7 +41,7 @@ export function Header() {
   const nav = user ? customerNav : publicNav;
 
   function logOut() {
-    signOut();
+    void auth.logout();
     setOpen(false);
     router.push("/");
   }
