@@ -5,7 +5,8 @@ import { Download, Mail, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
 import { formatKrw } from "@/lib/format";
-import { bookingTabCounts, orgBookings, orgBookingStatus, type OrgBooking, type OrgBookingStatus } from "@/lib/organizer";
+import { orgBookingStatus, type OrgBooking, type OrgBookingStatus } from "@/lib/organizer";
+import { useEventData } from "./useEventData";
 import { useOrganizer } from "./OrganizerContext";
 import { downloadCsv, EventPicker, OrgPageHeader, Panel } from "./ui";
 
@@ -24,8 +25,10 @@ export function BookingsPage() {
   const { event } = useOrganizer();
   const [tab, setTab] = useState<TabId>("all");
   const [query, setQuery] = useState("");
-  const rows: OrgBooking[] = orgBookings;
-  const [openId, setOpenId] = useState<string>(orgBookings[0]!.id);
+  const { data, error } = useEventData<{ bookings: OrgBooking[] }>(event.id ? `/api/organizer/events/${encodeURIComponent(event.id)}/bookings` : null);
+  const rows = useMemo(() => data?.bookings ?? [], [data]);
+  const [openId, setOpenId] = useState<string>("");
+  const count = (id: TabId) => (id === "all" ? rows.length : rows.filter((b) => b.status === id).length);
   const [drawer, setDrawer] = useState(false);
 
   const visible = useMemo(() => {
@@ -36,7 +39,7 @@ export function BookingsPage() {
     );
   }, [rows, tab, query]);
 
-  const selected = rows.find((b) => b.id === openId);
+  const selected = rows.find((b) => b.id === openId) ?? visible[0];
 
   function open(id: string) {
     setOpenId(id);
@@ -82,7 +85,7 @@ export function BookingsPage() {
                 }`}
               >
                 {t.label}
-                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted">{bookingTabCounts[t.id]}</span>
+                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] text-muted">{count(t.id)}</span>
               </button>
             );
           })}
@@ -120,7 +123,7 @@ export function BookingsPage() {
                     key={b.id}
                     onClick={() => open(b.id)}
                     className={`cursor-pointer border-b border-line last:border-b-0 hover:bg-surface-2/60 ${
-                      b.id === openId ? "bg-gold/5" : ""
+                      b.id === selected?.id ? "bg-gold/5" : ""
                     }`}
                   >
                     <td className="py-4 pl-5 pr-4 font-mono text-[11px] text-muted">
@@ -166,9 +169,11 @@ export function BookingsPage() {
             ))}
           </ul>
 
-          {visible.length === 0 && <p className="p-8 text-center text-sm text-muted">No bookings match.</p>}
+          {visible.length === 0 && (
+            <p className="p-8 text-center text-sm text-muted">{!event.id ? "Create an event to see its bookings." : !data ? (error ?? "Loading bookings…") : "No bookings match."}</p>
+          )}
           <p className="border-t border-line px-5 py-3 text-[11px] text-dim">
-            Showing {visible.length} of {bookingTabCounts[tab]} bookings
+            Showing {visible.length} of {count(tab)} bookings
           </p>
         </Panel>
 
@@ -186,7 +191,6 @@ export function BookingsPage() {
 }
 
 function BookingDetail({ booking: b, onClose }: { booking: OrgBooking; onClose: () => void }) {
-  const [sent, setSent] = useState(false);
   const meta = orgBookingStatus[b.status];
 
   return (
@@ -279,12 +283,13 @@ function BookingDetail({ booking: b, onClose }: { booking: OrgBooking; onClose: 
           variant="outline"
           size="sm"
           className="w-full border-line text-text hover:bg-surface-2"
-          disabled={b.status !== "paid"}
-          // TODO: re-send the ticket email through the API.
-          onClick={() => setSent(true)}
+          // TODO: re-send the ticket email once email sending is set up. Until then it stays switched off.
+          disabled
+          title="Emails aren't sent yet. The buyer can open their tickets in their account."
         >
-          <Mail size={14} aria-hidden /> {sent ? "Sent" : "Resend tickets"}
+          <Mail size={14} aria-hidden /> Resend tickets
         </Button>
+        <p className="mt-2 text-center text-[11px] text-dim">Emails aren&apos;t sent yet. Buyers open their QR tickets in their SL Events account.</p>
       </div>
     </Panel>
   );

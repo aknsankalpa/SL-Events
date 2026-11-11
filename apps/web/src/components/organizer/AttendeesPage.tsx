@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Hourglass, ScanLine, Search, Star, TriangleAlert, UserCheck, Users } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/StatusBadge";
-import { attendees as seed, attendeeStats, type Attendee } from "@/lib/organizer";
+import type { Attendee } from "@/lib/organizer";
+import { useEventData } from "./useEventData";
 import { useOrganizer } from "./OrganizerContext";
 import { downloadCsv, EventPicker, OrgPageHeader, Panel, StatCard } from "./ui";
 import { Select } from "@/components/ui/Select";
@@ -13,7 +14,11 @@ const PAGE_SIZE = 7;
 
 export function AttendeesPage() {
   const { event } = useOrganizer();
-  const [rows, setRows] = useState<Attendee[]>(seed);
+  type Stats = { total: number; paidBookings: number; checkedIn: number; vip: number; unpaidTickets: number; ticketsListed: number };
+  const { data, error, reload } = useEventData<{ attendees: Attendee[]; stats: Stats }>(event.id ? `/api/organizer/events/${encodeURIComponent(event.id)}/attendees` : null);
+  const rows = useMemo(() => data?.attendees ?? [], [data]);
+  const attendeeStats: Stats = data?.stats ?? { total: 0, paidBookings: 0, checkedIn: 0, vip: 0, unpaidTickets: 0, ticketsListed: 0 };
+  const [message, setMessage] = useState<{ ok: boolean; text: string }>();
   const [query, setQuery] = useState("");
   const [ticket, setTicket] = useState("all");
   const [state, setState] = useState("all");
@@ -24,7 +29,7 @@ export function AttendeesPage() {
     return rows.filter(
       (a) =>
         (!q || `${a.name} ${a.email} ${a.code}`.toLowerCase().includes(q)) &&
-        (ticket === "all" || a.ticket === ticket) &&
+        (ticket === "all" || a.ticket.split(" · ")[0] === ticket) &&
         (state === "all" || a.state === state),
     );
   }, [rows, query, ticket, state]);
@@ -34,9 +39,31 @@ export function AttendeesPage() {
   const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
   const checkedIn = rows.filter((a) => a.state === "checked_in").length;
 
-  const checkIn = (code: string) =>
-    // TODO: record the check-in server-side; this must be atomic so a ticket cannot be used twice.
-    setRows((prev) => prev.map((a) => (a.code === code && a.state === "not_yet" ? { ...a, state: "checked_in" } : a)));
+  /** Checks a ticket in on the server, which admits each code once, even with several scanners at the door. */
+  async function checkIn(code: string) {
+    try {
+      const res = await fetch("/api/staff/checkin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId: event.id, code, gate: "Attendee list" }),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const r = (await res.json().catch(() => ({}))) as { outcome?: string; holder?: string; scannedAt?: string; error?: string };
+      const text: Record<string, string> = {
+        admitted: `${r.holder} is checked in.`,
+        already_used: `${r.holder} was already checked in${r.scannedAt ? ` (${r.scannedAt})` : ""}.`,
+        not_paid: `${r.holder}'s booking isn't paid yet.`,
+        cancelled: `${r.holder}'s booking was cancelled.`,
+        wrong_event: "That ticket is for a different event.",
+        not_found: "That ticket code doesn't exist.",
+      };
+      setMessage({ ok: r.outcome === "admitted", text: r.outcome ? text[r.outcome]! : (r.error ?? "Couldn't check in.") });
+    } catch {
+      setMessage({ ok: false, text: "We couldn't reach SL Events." });
+    }
+    await reload();
+  }
 
   const resetPage = <T,>(set: (v: T) => void) => (v: T) => {
     set(v);
@@ -70,15 +97,21 @@ export function AttendeesPage() {
         }
       />
 
+      {message && (
+        <p role="status" className={`mb-4 rounded-lg border px-4 py-3 text-sm text-text ${message.ok ? "border-success/40 bg-success/10" : "border-amber/40 bg-amber/10"}`}>
+          {message.text}
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Attendees" value={attendeeStats.total} Icon={Users} sub={`From ${attendeeStats.paidBookings} paid bookings`} />
         <StatCard
           label="Checked in"
           value={`${checkedIn} / ${attendeeStats.total}`}
           Icon={UserCheck}
-          sub="Doors open 5:30 PM, 14 Nov"
+          sub={event.dateLabel || "Ticket holders who have come in"}
         />
-        <StatCard label="VIP guests" value={attendeeStats.vip} Icon={Star} sub="Meet-and-greet list ready" />
+        <StatCard label="VIP guests" value={attendeeStats.vip} Icon={Star} sub="Paid tickets with VIP in their name" />
         <StatCard
           label="Not yet paid"
           value={`${attendeeStats.unpaidTickets} tickets`}
@@ -86,7 +119,7 @@ export function AttendeesPage() {
           subTone="warn"
           sub={
             <>
-              <TriangleAlert size={12} aria-hidden /> Not on this list until approved
+              <TriangleAlert size={12} aria-hidden /> Can&apos;t be checked in until approved
             </>
           }
         />
@@ -106,7 +139,7 @@ export function AttendeesPage() {
         </label>
         <FilterSelect label="Ticket type" value={ticket} onChange={resetPage(setTicket)}>
           <option value="all">All ticket types</option>
-          {["General", "VIP", "Student"].map((t) => (
+          {[...new Set(rows.map((a) => a.ticket.split(" · ")[0]!))].sort().map((t) => (
             <option key={t}>{t}</option>
           ))}
         </FilterSelect>
@@ -177,7 +210,11 @@ export function AttendeesPage() {
           ))}
         </ul>
 
-        {visible.length === 0 && <p className="p-8 text-center text-sm text-muted">No attendees match your filters.</p>}
+        {visible.length === 0 && (
+          <p className="p-8 text-center text-sm text-muted">
+            {!event.id ? "Create an event to see its ticket holders." : !data ? (error ?? "Loading ticket holders…") : rows.length ? "No attendees match your filters." : "No tickets booked yet."}
+          </p>
+        )}
       </Panel>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -211,6 +248,7 @@ function CheckInBadge({ state }: { state: Attendee["state"] }) {
 function RowAction({ a, onCheckIn }: { a: Attendee; onCheckIn: () => void }) {
   if (a.state === "cancelled") return <span className="text-xs text-dim">{a.note}</span>;
   if (a.state === "checked_in") return <span className="text-xs text-dim">Entered</span>;
+  if (a.code === "—") return <span className="text-xs text-dim">{a.note ?? "Not paid yet"}</span>;
   return (
     <Button variant="outline" size="sm" className="border-line text-text hover:bg-surface-2" onClick={onCheckIn}>
       Check in

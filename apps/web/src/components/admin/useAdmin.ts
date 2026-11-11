@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import {
-  dashboardStats,
   seedApplications,
   seedApproved,
   seedRejected,
@@ -155,15 +154,52 @@ export function useAdminUsers() {
   return { users, overrides: state.users };
 }
 
+/* ---------- payment proofs waiting, from the server ---------- */
+
+let pendingPayments = 0;
+const paymentListeners = new Set<() => void>();
+let paymentsLoading: Promise<void> | null = null;
+let paymentsLoaded = false;
+
+/** Counts the payment screenshots waiting to be checked across every event (again). */
+export function refreshPendingPayments(): Promise<void> {
+  paymentsLoading ??= fetch("/api/payments/queue?all=1", { credentials: "same-origin", cache: "no-store" })
+    .then(async (res) => {
+      const data = (await res.json().catch(() => ({}))) as { items?: unknown[] };
+      if (res.ok) pendingPayments = data.items?.length ?? 0;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      paymentsLoading = null;
+      paymentsLoaded = true;
+      paymentListeners.forEach((l) => l());
+    });
+  return paymentsLoading;
+}
+
+function usePendingPayments() {
+  const n = useSyncExternalStore(
+    (l) => {
+      paymentListeners.add(l);
+      return () => paymentListeners.delete(l);
+    },
+    () => pendingPayments,
+    () => 0,
+  );
+  useEffect(() => {
+    if (!paymentsLoaded) void refreshPendingPayments();
+  }, []);
+  return n;
+}
+
 /** What the sidebar badges show: work waiting for an admin. */
 export function useAdminCounts() {
   const { applications } = useApplications();
   const { events } = useAdminEvents();
-  const state = useAdminState();
-  const confirmed = Object.values(state.bankDone).filter((v) => v === "confirmed").length;
+  const payments = usePendingPayments();
   return {
     organizers: applications.filter((a) => a.status === "new" || a.status === "info_asked").length,
     events: events.filter((e) => e.status === "review").length,
-    payments: Math.max(0, dashboardStats.paymentsToConfirm - confirmed),
+    payments,
   };
 }

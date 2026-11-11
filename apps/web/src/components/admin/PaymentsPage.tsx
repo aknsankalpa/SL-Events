@@ -9,10 +9,11 @@ import { logAudit, updateAdmin } from "@/lib/adminStore";
 import { staffActions } from "@/lib/bookingStore";
 import { formatKrw } from "@/lib/format";
 import { ADMIN } from "@/lib/admin";
+import { PaymentReview } from "@/components/organizer/VerifyPayments";
 import { AdminHeader, Panel, Tabs, Toast } from "./ui";
-import { useAdminCounts, useAdminState } from "./useAdmin";
+import { refreshPendingPayments, useAdminCounts, useAdminState } from "./useAdmin";
 
-type Tab = "bank" | "gateway" | "failed";
+type Tab = "proofs" | "bank" | "gateway" | "failed";
 type Filter = "all" | "action" | "matched";
 
 const matchMeta: Record<MatchState, { label: string; tone: "success" | "warning" | "danger" }> = {
@@ -27,7 +28,7 @@ const bankRef = (row: BankRow) => `KB-20261019-${row.deposit.replace(/\D/g, "").
 export function PaymentsPage() {
   const state = useAdminState();
   const counts = useAdminCounts();
-  const [tab, setTab] = useState<Tab>("bank");
+  const [tab, setTab] = useState<Tab>("proofs");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState("b3");
   const [choice, setChoice] = useState<"waive" | "ask">("ask");
@@ -102,7 +103,7 @@ export function PaymentsPage() {
   }
 
   const kpis = [
-    { label: "Waiting for confirmation", value: String(counts.payments), Icon: Hourglass, note: "₩540,000 · oldest 5 h", warn: true },
+    { label: "Waiting for confirmation", value: String(counts.payments), Icon: Hourglass, note: "Payment screenshots to check", warn: counts.payments > 0 },
     { label: "Confirmed today", value: String(31 + Object.values(state.bankDone).filter((v) => v === "confirmed").length), Icon: CheckCheck, note: "₩1,240,000", up: true },
     { label: "Deposits with no booking", value: String(bankRows.filter((r) => r.match === "none" && !done(r)).length), Icon: Link2, note: "₩75,000 to investigate", warn: true },
     { label: "Failed payments (7 days)", value: String(failedPayments.length), Icon: XCircle, note: "3 card · 1 Toss Pay" },
@@ -146,13 +147,25 @@ export function PaymentsPage() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { id: "bank", label: "Bank transfers", count: counts.payments },
+            { id: "proofs", label: "Payment proofs", count: counts.payments },
+            { id: "bank", label: "Bank statement (sample)", count: needsAction },
             { id: "gateway", label: "Card & gateway", count: 58 },
             { id: "failed", label: "Failed", count: failedPayments.length },
           ]}
         />
       </div>
 
+      {tab === "proofs" && (
+        <div className="mt-6">
+          <PaymentReview scope="admin" embedded onResolved={() => void refreshPendingPayments()} />
+        </div>
+      )}
+
+      {tab === "bank" && (
+        <p className="mt-6 rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-xs text-text">
+          Sample data: importing bank statements and matching deposits to bookings isn&apos;t connected yet. Check real payments on the Payment proofs tab.
+        </p>
+      )}
       {tab === "bank" && (
         <div className="mt-6 grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_21rem]">
           <div>
