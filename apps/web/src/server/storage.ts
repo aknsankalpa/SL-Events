@@ -1,14 +1,24 @@
 // Uploaded files (payment screenshots) on the server's own disk. Server code only.
 //
 // Files live outside the website's public folder, so nobody can open one by guessing its address: they are served
-// only through a route that checks who is asking. On Hostinger, set UPLOAD_DIR to a folder that survives redeploys.
+// only through a route that checks who is asking.
+//
+// Where: UPLOAD_DIR when it is set. Otherwise, while developing, ./storage/uploads inside the website folder; on the
+// live site, a folder in the hosting account's home folder (~/sl-events-uploads). Hostinger replaces the whole build
+// folder (~/domains/<domain>/hbuilds) on every deployment, so files must never be kept inside it.
 
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 // The /*turbopackIgnore*/ comments tell the build these are runtime folders, not files of the website to bundle.
-const ROOT = path.resolve(/*turbopackIgnore: true*/ process.env.UPLOAD_DIR || path.join(/*turbopackIgnore: true*/ process.cwd(), "storage", "uploads"));
+const ROOT = path.resolve(
+  /*turbopackIgnore: true*/ process.env.UPLOAD_DIR ||
+    (process.env.NODE_ENV === "production"
+      ? path.join(/*turbopackIgnore: true*/ homedir(), "sl-events-uploads")
+      : path.join(/*turbopackIgnore: true*/ process.cwd(), "storage", "uploads")),
+);
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 

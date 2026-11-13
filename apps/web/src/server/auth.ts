@@ -11,6 +11,7 @@ import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { db, schema as s } from "@/db";
 import { makeUser, type SessionUser } from "@/lib/session";
+import { sendMail } from "./mail";
 
 export const SESSION_COOKIE = "sl_session";
 const SESSION_DAYS = 30;
@@ -139,12 +140,28 @@ export async function checkCode(email: string, purpose: CodePurpose, code: strin
 }
 
 /**
- * Sends the code by email. Email sending (the Hostinger mailbox over SMTP) is the next piece of work; until then the
- * code is written to the server's terminal, and in development the API also returns it so the screens can show it.
+ * Sends the code by email (server/mail.ts). Without SMTP settings the message goes to the server log instead, and in
+ * development the API also returns the code so the screens can show it.
  */
 async function sendCodeEmail(email: string, purpose: CodePurpose, code: string) {
-  // TODO: send through the Hostinger mailbox (SMTP) once it is configured.
-  console.info(`[auth] ${purpose === "verify_email" ? "Verification" : "Password reset"} code for ${email}: ${code}`);
+  const verify = purpose === "verify_email";
+  const subject = verify ? `${code} is your SL Events verification code` : `${code} is your SL Events password reset code`;
+  const why = verify ? "Enter this code to confirm your email address:" : "Enter this code to choose a new password:";
+  const ignore = verify ? "If you didn't create an SL Events account, you can ignore this email." : "If you didn't ask to reset your password, you can ignore this email: your password stays the same.";
+  await sendMail({
+    to: email,
+    subject,
+    text: `${why}
+
+${code}
+
+The code works for ${CODE_MINUTES} minutes.
+
+${ignore}
+
+SL Events`,
+    html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.5"><p>${why}</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:16px 0">${code}</p><p>The code works for ${CODE_MINUTES} minutes.</p><p style="color:#666">${ignore}</p><p>SL Events</p></div>`,
+  });
 }
 
 /** Codes are shown on screen only while developing, never on the live site. */
