@@ -37,7 +37,7 @@ If the password contains `@`, `:`, `/`, `#` or `?`, write those characters as `%
 
 ## 2. Create the mailbox that sends codes
 
-hPanel → **Emails** → your domain → create a mailbox such as `no-reply@your-domain`. Save its password.
+hPanel → **Emails** → your domain → create a mailbox such as `no-reply@slevents.kr`. Save its password.
 
 When the domain's DNS is at Hostinger, the mail records (MX, SPF, DKIM) are set for you. Check them under
 **Emails → Email deliverability** (or **DNS records**). Otherwise codes may land in spam.
@@ -73,9 +73,9 @@ Under **Set environment variables**, add the following. You can also put them in
 | `DATABASE_URL`  | the address from step 1                                      |
 | `SMTP_HOST`     | `smtp.hostinger.com`                                         |
 | `SMTP_PORT`     | `465`                                                        |
-| `SMTP_USER`     | `no-reply@your-domain`                                       |
+| `SMTP_USER`     | `no-reply@slevents.kr`                                       |
 | `SMTP_PASS`     | the mailbox password                                         |
-| `MAIL_FROM`     | `SL Events <no-reply@your-domain>`                           |
+| `MAIL_FROM`     | `SL Events <no-reply@slevents.kr>`                           |
 | `ADMIN_EMAIL`   | the platform owner's own email address                       |
 
 Optional settings:
@@ -102,7 +102,7 @@ free SSL certificate is active. The site must be opened over `https://`, because
 
 ## 6. First sign-in and settings
 
-1. Open `https://your-domain/forgot-password` and enter the `ADMIN_EMAIL` address. The code arrives by email. Use
+1. Open `https://slevents.kr/forgot-password` and enter the `ADMIN_EMAIL` address. The code arrives by email. Use
    it to choose a password, then sign in and open `/admin`.
 2. **Admin → Settings: set the bank account customers pay into.** Until you do, the site shows the sample account
    (KB Kookmin Bank 123401-04-567890), and customers would transfer money to it. Also fill in the support
@@ -112,14 +112,14 @@ free SSL certificate is active. The site must be opened over `https://`, because
 
 ## 7. The mobile app
 
-The app needs the website's address at build time. In `apps/mobile/eas.json`, add it to the `preview` and
-`production` build profiles:
+The app needs the website's address at build time. It is already set for the `preview` and `production` build
+profiles in `apps/mobile/eas.json`:
 
 ```json
-"env": { "EXPO_PUBLIC_WEB_URL": "https://your-domain" }
+"env": { "EXPO_PUBLIC_WEB_URL": "https://slevents.kr" }
 ```
 
-Then build with EAS (`npm run build:android` / `npm run build:ios` in `apps/mobile`). Store submission is a
+If the domain ever changes, change it there and build the app again. Then build with EAS (`npm run build:android` / `npm run build:ios` in `apps/mobile`). Store submission is a
 separate step.
 
 ## Updating the live site
